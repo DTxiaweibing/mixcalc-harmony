@@ -26,14 +26,32 @@ struct Index {
   build() {
     Column() {
       Row() {
+        Row() {
+          Text('☰')
+            .fontSize(22)
+            .fontColor(Color.White)
+            .onClick(() => {
+            })
+        }
+        .width('20%')
+        .padding({ left: 10 })
+        .justifyContent(FlexAlign.Start)
+
         Text($r('app.string.title_main'))
           .fontSize(20)
           .fontColor(Color.White)
+          .width('60%')
+          .textAlign(TextAlign.Center)
+
+        Text('')
+          .fontSize(14)
+          .fontColor(Color.White)
+          .width('20%')
+          .textAlign(TextAlign.Center)
       }
       .width('100%')
       .height(40)
       .backgroundColor($r('app.color.title_bar_bg'))
-      .justifyContent(FlexAlign.Center)
 
       MixCalcTable({ rows: this.rows })
         .layoutWeight(1)

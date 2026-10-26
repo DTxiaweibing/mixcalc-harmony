@@ -8,6 +8,64 @@ class Metrics {
   heads: string[] = ['序号', '棚号', '棚数', '平均', '发酵料', '粉料', '0.3料', '0.5料', '1.0料', '水', '称料'];
 }
 
+
+@CustomDialog
+struct CellEditorDialog {
+  controller?: CustomDialogController;
+  title: string = '';
+  initValue: string = '';
+  isNumber: boolean = false;
+  onConfirm: (value: string) => void = () => {};
+  @State input: string = '';
+
+  aboutToAppear(): void {
+    this.input = this.initValue;
+  }
+
+  build() {
+    Column() {
+      Text(this.title)
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .margin({ top: 16, bottom: 12 })
+
+      TextInput({ text: this.input })
+        .type(this.isNumber ? InputType.Number : InputType.Normal)
+        .fontSize(16)
+        .textAlign(TextAlign.Center)
+        .height(44)
+        .margin({ left: 20, right: 20 })
+        .defaultFocus(true)
+        .onChange((value: string) => {
+          this.input = value;
+        })
+
+      Row() {
+        Button('取消')
+          .layoutWeight(1)
+          .backgroundColor('#F0F0F0')
+          .fontColor('#333333')
+          .onClick(() => {
+            this.controller?.close();
+          })
+        Button('确定')
+          .layoutWeight(1)
+          .backgroundColor('#2D8C42')
+          .fontColor(Color.White)
+          .margin({ left: 12 })
+          .onClick(() => {
+            this.onConfirm(this.input);
+            this.controller?.close();
+          })
+      }
+      .width('100%')
+      .padding(16)
+    }
+    .width('88%')
+    .backgroundColor(Color.White)
+    .borderRadius(12)
+  }
+}
 @Component
 export struct MixCalcTable {
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
@@ -24,6 +82,18 @@ export struct MixCalcTable {
   private heightVp: number = 0;
   private frozenW: number = 40;
 
+  @State editing: boolean = false;
+  @State editText: string = '';
+  private editRow: number = -1;
+  private editCol: number = -1;
+  private editX: number = 0;
+  private editY: number = 0;
+  private editW: number = 0;
+
+  waterPercentage: number = 20;
+  fermentedInWater: boolean = false;
+  fermentedInAverage: boolean = false;
+
   private readonly headBg: string = '#E8F5E9';
   private readonly footBg: string = '#EAF3EC';
   private readonly gridColor: string = '#000000';
@@ -32,6 +102,126 @@ export struct MixCalcTable {
   private readonly textBlue: string = '#0000FF';
   private readonly footText: string = '#1F6B30';
 
+  editorTitle: string = '';
+  editorValue: string = '';
+  editorIsNumber: boolean = false;
+  private editorController: CustomDialogController = new CustomDialogController({
+    builder: CellEditorDialog({
+      title: this.editorTitle,
+      initValue: this.editorValue,
+      isNumber: this.editorIsNumber,
+      onConfirm: (value: string) => {
+        this.applyEdit(value);
+      }
+    }),
+    autoCancel: true,
+    customStyle: true
+  });
+  private isEditableColumn(column: number): boolean {
+    return column >= 1 && column <= 8;
+  }
+
+  private columnAt(x: number): number {
+    if (x < this.frozenW) {
+      return 0;
+    }
+    for (let c = 1; c < this.metrics.widths.length; c++) {
+      let cx: number = this.xOfColumn(c) - this.offsetX;
+      if (x >= cx && x < cx + this.metrics.widths[c]) {
+        return c;
+      }
+    }
+    return -1;
+  }
+
+  private xOfColumn(index: number): number {
+    let x: number = 0;
+    for (let i = 0; i < index; i++) {
+      x += this.metrics.widths[i];
+    }
+    return x;
+  }
+
+  private columnTitle(column: number): string {
+    switch (column) {
+      case 1: return '棚号';
+      case 2: return '棚数';
+      case 3: return '平均';
+      case 4: return '发酵料';
+      case 5: return '粉料';
+      case 6: return '0.3料';
+      case 7: return '0.5料';
+      case 8: return '1.0料';
+      default: return '';
+    }
+  }
+
+  private currentValue(row: number, column: number): string {
+    let data: FeedData = this.rows[row];
+    if (column === 1) {
+      return data.shedNumber;
+    }
+    let value: number = 0;
+    switch (column) {
+      case 2: value = data.shedCount; break;
+      case 3: value = data.average; break;
+      case 4: value = data.fermented; break;
+      case 5: value = data.powder; break;
+      case 6: value = data.feed03; break;
+      case 7: value = data.feed05; break;
+      case 8: value = data.feed10; break;
+      default: break;
+    }
+    return value === 0 ? '' : value.toFixed(2);
+  }
+
+  private applyEdit(text: string): void {
+    if (this.editRow < 0 || this.editCol < 0) {
+      return;
+    }
+    let row: FeedData = this.rows[this.editRow];
+    let value: string = text.trim();
+    if (this.editCol === 1) {
+      row.shedNumber = value;
+      row.isShedCountManuallyModified = false;
+    } else {
+      let number: number = value.length === 0 ? 0 : Number(value);
+      if (isNaN(number)) {
+        number = 0;
+      }
+      switch (this.editCol) {
+        case 2:
+          row.shedCount = Math.round(number);
+          row.isShedCountManuallyModified = true;
+          break;
+        case 3:
+          row.average = number;
+          row.isAverageManuallyModified = value.length > 0;
+          break;
+        case 4: row.fermented = number; break;
+        case 5: row.powder = number; break;
+        case 6: row.feed03 = number; break;
+        case 7: row.feed05 = number; break;
+        case 8: row.feed10 = number; break;
+        default: break;
+      }
+    }
+    row.updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+    this.draw();
+  }
+
+  private openEditor(row: number, column: number): void {
+    if (!this.isEditableColumn(column)) {
+      return;
+    }
+    this.stopFling();
+    this.editRow = row;
+    this.editCol = column;
+    this.editorTitle = this.columnTitle(column) + ' · 第' + (row + 1).toString() + '行';
+    this.editorValue = this.currentValue(row, column);
+    this.editorIsNumber = column !== 1;
+    this.editorController.open();
+  }
   private totalWidth(): number {
     let sum: number = 0;
     for (let i = 0; i < this.metrics.widths.length; i++) {
@@ -334,7 +524,6 @@ export struct MixCalcTable {
   aboutToDisappear(): void {
     this.stopFling();
   }
-
   private draw(): void {
     if (this.widthVp <= 0 || this.heightVp <= 0) {
       return;
@@ -369,9 +558,6 @@ export struct MixCalcTable {
             this.lastPanX = 0;
             this.lastPanY = 0;
           })
-          .onActionEnd((event: GestureEvent) => {
-            this.startFling(event.velocityX, event.velocityY);
-          })
           .onActionUpdate((event: GestureEvent) => {
             let dx: number = event.offsetX - this.lastPanX;
             let dy: number = event.offsetY - this.lastPanY;
@@ -381,6 +567,20 @@ export struct MixCalcTable {
             this.offsetY -= dy;
             this.draw();
           })
+          .onActionEnd((event: GestureEvent) => {
+            this.startFling(event.velocityX, event.velocityY);
+          })
       )
+      .onClick((event: ClickEvent) => {
+        let y: number = event.y;
+        if (y < this.metrics.headH || y >= this.heightVp - this.metrics.footH) {
+          return;
+        }
+        let row: number = Math.floor((y - this.metrics.headH + this.offsetY) / this.metrics.rowH);
+        if (row < 0 || row >= this.rows.length) {
+          return;
+        }
+        this.openEditor(row, this.columnAt(event.x));
+      })
   }
 }
