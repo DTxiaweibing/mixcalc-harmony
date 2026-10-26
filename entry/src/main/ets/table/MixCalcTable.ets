@@ -1,12 +1,11 @@
 import { FeedData } from '../model/FeedData';
 
-const WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
+const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
 const HEADS: string[] = ['序号', '棚号', '棚数', '平均', '发酵料', '粉料', '0.3料', '0.5料', '1.0料', '水', '称料'];
+const WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
 const ROW_H: number = 40;
 const HEAD_H: number = 40;
 const FOOT_H: number = 40;
-const FROZEN_W: number = 40;
-
 @CustomDialog
 struct CellEditorDialog {
   controller?: CustomDialogController;
@@ -23,16 +22,19 @@ struct CellEditorDialog {
   build() {
     Column() {
       Text(this.title)
-        .fontSize(16)
+        .fontSize(18)
         .fontWeight(FontWeight.Bold)
-        .margin({ top: 16, bottom: 12 })
+        .fontColor('#000000')
+        .padding({ top: 16, bottom: 12 })
+
+      Divider().strokeWidth(1).color('#E0E0E0')
 
       TextInput({ text: this.input })
         .type(this.isNumber ? InputType.Number : InputType.Normal)
         .fontSize(16)
         .textAlign(TextAlign.Center)
         .height(44)
-        .margin({ left: 20, right: 20 })
+        .margin({ left: 20, right: 20, top: 12 })
         .defaultFocus(true)
         .onChange((value: string) => {
           this.input = value;
@@ -40,28 +42,41 @@ struct CellEditorDialog {
 
       Row() {
         Button('取消')
+          .type(ButtonType.Normal)
           .layoutWeight(1)
-          .backgroundColor('#F0F0F0')
-          .fontColor('#333333')
+          .height(44)
+          .borderRadius(0)
+          .backgroundColor(Color.Transparent)
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#666666')
           .onClick(() => {
             this.controller?.close();
           })
+
+        Divider().vertical(true).height(44).strokeWidth(1).color('#E0E0E0')
+
         Button('确定')
+          .type(ButtonType.Normal)
           .layoutWeight(1)
-          .backgroundColor('#2D8C42')
-          .fontColor(Color.White)
-          .margin({ left: 12 })
+          .height(44)
+          .borderRadius(0)
+          .backgroundColor(Color.Transparent)
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#2D8C42')
           .onClick(() => {
             this.onConfirm(this.input);
             this.controller?.close();
           })
       }
       .width('100%')
-      .padding(16)
+      .margin({ top: 12 })
     }
-    .width('88%')
+    .width('80%')
     .backgroundColor(Color.White)
     .borderRadius(12)
+    .clip(true)
   }
 }
 
@@ -84,9 +99,7 @@ struct ConfirmDialog {
         .textAlign(TextAlign.Center)
         .padding({ top: 16, bottom: 12, left: 16, right: 16 })
 
-      Divider()
-        .strokeWidth(1)
-        .color('#E0E0E0')
+      Divider().strokeWidth(1).color('#E0E0E0')
 
       Text(this.message)
         .fontSize(15)
@@ -95,9 +108,7 @@ struct ConfirmDialog {
         .lineHeight(23)
         .padding({ top: 20, bottom: 20, left: 20, right: 20 })
 
-      Divider()
-        .strokeWidth(1)
-        .color('#E0E0E0')
+      Divider().strokeWidth(1).color('#E0E0E0')
 
       Row() {
         Button('取消')
@@ -113,11 +124,7 @@ struct ConfirmDialog {
             this.controller?.close();
           })
 
-        Divider()
-          .vertical(true)
-          .height(48)
-          .strokeWidth(1)
-          .color('#E0E0E0')
+        Divider().vertical(true).height(48).strokeWidth(1).color('#E0E0E0')
 
         Button(this.confirmText)
           .type(ButtonType.Normal)
@@ -143,6 +150,49 @@ struct ConfirmDialog {
   }
 }
 
+@CustomDialog
+struct ColumnMenuDialog {
+  controller?: CustomDialogController;
+  title: string = '';
+  items: string[] = [];
+  onSelect: (index: number) => void = () => {};
+
+  build() {
+    Column() {
+      Text(this.title)
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#000000')
+        .textAlign(TextAlign.Center)
+        .padding({ top: 16, bottom: 12, left: 16, right: 16 })
+
+      Divider().strokeWidth(1).color('#E0E0E0')
+
+      ForEach(this.items, (item: string, index: number) => {
+        Button(item)
+          .type(ButtonType.Normal)
+          .width('100%')
+          .height(40)
+          .borderRadius(0)
+          .backgroundColor(Color.Transparent)
+          .fontSize(15)
+          .fontColor('#333333')
+          .onClick(() => {
+            this.controller?.close();
+            this.onSelect(index);
+          })
+        if (index < this.items.length - 1) {
+          Divider().strokeWidth(1).color('#E0E0E0')
+        }
+      }, (item: string, index: number) => item + index.toString())
+    }
+    .width(200)
+    .backgroundColor(Color.White)
+    .borderRadius(12)
+    .clip(true)
+  }
+}
+
 @Component
 export struct MixCalcTable {
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
@@ -151,22 +201,14 @@ export struct MixCalcTable {
   rows: FeedData[] = [];
   onChanged: () => void = () => {};
   onHelp: () => void = () => {};
+  onColumnAction: (action: string, index: number) => void = () => {};
 
-  private resetTitle: string = '确认重置';
-  private resetMessage: string = '';
-  private resetController: CustomDialogController = new CustomDialogController({
-    builder: ConfirmDialog({
-      title: this.resetTitle,
-      message: this.resetMessage,
-      confirmText: '确定重置',
-      confirmColor: '#D32F2F',
-      onConfirm: () => {
-        this.resetAll();
-      }
-    }),
-    autoCancel: true,
-    customStyle: true
-  });
+  visibleMask: boolean[] = [];
+  fixedMask: boolean[] = [];
+
+  waterPercentage: number = 20;
+  fermentedInWater: boolean = false;
+  fermentedInAverage: boolean = false;
 
   @State offsetX: number = 0;
   @State offsetY: number = 0;
@@ -177,16 +219,12 @@ export struct MixCalcTable {
   private lastPanY: number = 0;
   private flingTimer: number = -1;
 
-  waterPercentage: number = 20;
-  fermentedInWater: boolean = false;
-  fermentedInAverage: boolean = false;
-
-  editorTitle: string = '';
-  editorValue: string = '';
-  editorIsNumber: boolean = false;
   private editRow: number = -1;
   private editCol: number = -1;
 
+  private editorTitle: string = '';
+  private editorValue: string = '';
+  private editorIsNumber: boolean = false;
   private editorController: CustomDialogController = new CustomDialogController({
     builder: CellEditorDialog({
       title: this.editorTitle,
@@ -200,20 +238,84 @@ export struct MixCalcTable {
     customStyle: true
   });
 
-  private totalWidth(): number {
-    let sum: number = 0;
-    for (let i = 0; i < WIDTHS.length; i++) {
-      sum += WIDTHS[i];
+  private resetMessage: string = '';
+  private resetController: CustomDialogController = new CustomDialogController({
+    builder: ConfirmDialog({
+      title: '确认重置',
+      message: this.resetMessage,
+      confirmText: '确定重置',
+      confirmColor: '#D32F2F',
+      onConfirm: () => {
+        this.resetAll();
+      }
+    }),
+    autoCancel: true,
+    customStyle: true
+  });
+
+  @State colMenuOpen: boolean = false;
+  @State colMenuX: number = 0;
+  @State colMenuTitle: string = '';
+  @State colMenuItems: string[] = [];
+  private colMenuIndex: number = -1;
+
+  private isVisible(index: number): boolean {
+    if (index === 0) {
+      return true;
     }
-    return sum;
+    if (this.visibleMask.length > index) {
+      return this.visibleMask[index];
+    }
+    return true;
   }
 
-  private xOfColumn(index: number): number {
-    let x: number = 0;
-    for (let i = 0; i < index; i++) {
-      x += WIDTHS[i];
+  private isFixed(index: number): boolean {
+    if (index === 0) {
+      return true;
     }
-    return x;
+    if (this.fixedMask.length > index) {
+      return this.fixedMask[index];
+    }
+    return false;
+  }
+
+  private fixedIndices(): number[] {
+    const result: number[] = [];
+    for (let i = 0; i < WIDTHS.length; i++) {
+      if (this.isVisible(i) && this.isFixed(i)) {
+        result.push(i);
+      }
+    }
+    return result;
+  }
+
+  private normalIndices(): number[] {
+    const result: number[] = [];
+    for (let i = 0; i < WIDTHS.length; i++) {
+      if (this.isVisible(i) && !this.isFixed(i)) {
+        result.push(i);
+      }
+    }
+    return result;
+  }
+
+  private frozenWidth(): number {
+    let w: number = 0;
+    const fixed: number[] = this.fixedIndices();
+    for (let i = 0; i < fixed.length; i++) {
+      w += WIDTHS[fixed[i]];
+    }
+    return w;
+  }
+
+  private totalWidth(): number {
+    let w: number = 0;
+    for (let i = 0; i < WIDTHS.length; i++) {
+      if (this.isVisible(i)) {
+        w += WIDTHS[i];
+      }
+    }
+    return w;
   }
 
   private maxOffsetX(): number {
@@ -221,8 +323,7 @@ export struct MixCalcTable {
   }
 
   private maxOffsetY(): number {
-    let bodyH: number = this.rows.length * ROW_H;
-    return Math.max(0, bodyH - this.viewH);
+    return Math.max(0, this.rows.length * ROW_H - this.viewH);
   }
 
   private clampOffsets(): void {
@@ -230,7 +331,26 @@ export struct MixCalcTable {
     this.offsetY = Math.min(Math.max(0, this.offsetY), this.maxOffsetY());
   }
 
-  // ===== 数据派生 =====
+  private columnAt(x: number): number {
+    const fixed: number[] = this.fixedIndices();
+    let acc: number = 0;
+    for (let i = 0; i < fixed.length; i++) {
+      if (x >= acc && x < acc + WIDTHS[fixed[i]]) {
+        return fixed[i];
+      }
+      acc += WIDTHS[fixed[i]];
+    }
+    const normal: number[] = this.normalIndices();
+    for (let i = 0; i < normal.length; i++) {
+      const cx: number = this.frozenWidth() + acc - this.offsetX;
+      if (x >= cx && x < cx + WIDTHS[normal[i]]) {
+        return normal[i];
+      }
+      acc += WIDTHS[normal[i]];
+    }
+    return -1;
+  }
+
   private cellText(row: FeedData, column: number): string {
     switch (column) {
       case 1: return row.shedNumber;
@@ -260,7 +380,7 @@ export struct MixCalcTable {
   private sumColumn(column: number): number {
     let s: number = 0;
     for (let i = 0; i < this.rows.length; i++) {
-      let r: FeedData = this.rows[i];
+      const r: FeedData = this.rows[i];
       switch (column) {
         case 2: s += r.shedCount; break;
         case 4: s += r.fermented; break;
@@ -289,7 +409,7 @@ export struct MixCalcTable {
     let sheds: number = 0;
     let total: number = 0;
     for (let i = 0; i < this.rows.length; i++) {
-      let r: FeedData = this.rows[i];
+      const r: FeedData = this.rows[i];
       if (r.average > 0 && r.shedCount > 0) {
         sheds += r.shedCount;
         total += r.average * r.shedCount;
@@ -339,23 +459,6 @@ export struct MixCalcTable {
     return column >= 1 && column <= 8;
   }
 
-  private columnAt(x: number): number {
-    if (x < FROZEN_W) {
-      return 0;
-    }
-    for (let c = 1; c < WIDTHS.length; c++) {
-      let cx: number = this.xOfColumn(c) - this.offsetX;
-      if (x >= cx && x < cx + WIDTHS[c]) {
-        return c;
-      }
-    }
-    return -1;
-  }
-
-  private columnTitle(column: number): string {
-    return column >= 0 && column < HEADS.length ? HEADS[column] : '';
-  }
-
   private nfIndexOf(column: number): number {
     switch (column) {
       case 5: return 0;
@@ -367,7 +470,7 @@ export struct MixCalcTable {
   }
 
   private currentValue(row: number, column: number): string {
-    let data: FeedData = this.rows[row];
+    const data: FeedData = this.rows[row];
     if (column === 1) {
       return data.shedNumber;
     }
@@ -418,9 +521,9 @@ export struct MixCalcTable {
     if (this.rows.length < 2) {
       return;
     }
-    let first: FeedData = this.rows[0];
-    let oldCount: number = first.shedCount;
-    let oldAverage: number = first.average;
+    const first: FeedData = this.rows[0];
+    const oldCount: number = first.shedCount;
+    const oldAverage: number = first.average;
 
     if (!first.isShedCountManuallyModified) {
       first.calculateShedCount();
@@ -438,8 +541,8 @@ export struct MixCalcTable {
       }
     }
 
-    let sum: number = this.sumBelowFirst();
-    let remainder: number = first.shedCountBase - (sum - first.shedCountBaseSum);
+    const sum: number = this.sumBelowFirst();
+    const remainder: number = first.shedCountBase - (sum - first.shedCountBaseSum);
     first.shedCount = remainder;
 
     if (remainder !== oldCount && oldAverage > 0 && !first.isAverageManuallyModified) {
@@ -453,9 +556,9 @@ export struct MixCalcTable {
     if (this.editRow < 0 || this.editCol < 0) {
       return;
     }
-    let row: FeedData = this.rows[this.editRow];
-    let value: string = text.trim();
-    let col: number = this.editCol;
+    const row: FeedData = this.rows[this.editRow];
+    const value: string = text.trim();
+    const col: number = this.editCol;
     let number: number = value.length === 0 ? 0 : Number(value);
     if (isNaN(number)) {
       number = 0;
@@ -467,7 +570,7 @@ export struct MixCalcTable {
         this.clearRowData(row, true);
       }
     } else if (col === 2) {
-      let newCount: number = Math.round(number);
+      const newCount: number = Math.round(number);
       row.shedCount = newCount;
       row.isShedCountManuallyModified = !(newCount === 0 || value.length === 0);
       if (this.editRow === 0) {
@@ -477,8 +580,8 @@ export struct MixCalcTable {
     } else if (col === 3) {
       row.setAverageManually(number, this.fermentedInAverage);
     } else {
-      let nfIndex: number = this.nfIndexOf(col);
-      let origin: number = nfIndex >= 0 ? row.getNonFermentedValue(nfIndex) : 0;
+      const nfIndex: number = this.nfIndexOf(col);
+      const origin: number = nfIndex >= 0 ? row.getNonFermentedValue(nfIndex) : 0;
       row.isAverageManuallyModified = false;
       if (number === 0 && nfIndex >= 0) {
         row.mergeSmallerWhenCleared(nfIndex, origin);
@@ -522,18 +625,70 @@ export struct MixCalcTable {
     this.stopFling();
     this.editRow = row;
     this.editCol = column;
-    this.editorTitle = this.columnTitle(column) + ' · 第' + (row + 1).toString() + '行';
+    this.editorTitle = HEADS[column] + ' · 第' + (row + 1).toString() + '行';
     this.editorValue = this.currentValue(row, column);
     this.editorIsNumber = column !== 1;
     this.editorController.open();
   }
 
-  private showHelp(): void {
-    this.onHelp();
+  private columnLeft(index: number): number {
+    const fixed: number[] = this.fixedIndices();
+    let x: number = 0;
+    for (let i = 0; i < fixed.length; i++) {
+      if (fixed[i] === index) {
+        return x;
+      }
+      x += WIDTHS[fixed[i]];
+    }
+    const normal: number[] = this.normalIndices();
+    x = 0;
+    for (let i = 0; i < normal.length; i++) {
+      if (normal[i] === index) {
+        return this.frozenWidth() + x - this.offsetX;
+      }
+      x += WIDTHS[normal[i]];
+    }
+    return 0;
+  }
+
+  private showColumnMenu(index: number): void {
+    if (index === 0) {
+      return;
+    }
+    const fixed: boolean = this.isFixed(index);
+    const visible: boolean = this.isVisible(index);
+    this.colMenuIndex = index;
+    this.colMenuTitle = '列操作 - ' + HEADS[index];
+    this.colMenuItems = [
+      fixed ? '取消固定此列' : '固定此列',
+      visible ? '隐藏此列' : '显示此列',
+      '显示所有列',
+      '取消所有固定'
+    ];
+    const maxX: number = Math.max(0, this.viewW - 200);
+    this.colMenuX = Math.max(0, Math.min(this.columnLeft(index), maxX));
+    this.colMenuOpen = true;
+  }
+
+  private handleColumnChoice(choice: number): void {
+    const index: number = this.colMenuIndex;
+    this.colMenuOpen = false;
+    if (index < 0) {
+      return;
+    }
+    if (choice === 0) {
+      this.onColumnAction('toggle-fixed', index);
+    } else if (choice === 1) {
+      this.onColumnAction('toggle-visible', index);
+    } else if (choice === 2) {
+      this.onColumnAction('show-all', index);
+    } else if (choice === 3) {
+      this.onColumnAction('unfix-all', index);
+    }
   }
 
   private confirmReset(): void {
-    let filled: number = this.filledRows();
+    const filled: number = this.filledRows();
     this.resetMessage = filled > 0
       ? '确定要重置所有数据吗？\n\n当前已有 ' + filled.toString() + ' 行数据，重置后将全部清空。'
       : '确定要重置所有数据吗？\n\n当前没有数据需要重置。';
@@ -557,58 +712,60 @@ export struct MixCalcTable {
     this.ctx.fillRect(0, 0, this.viewW, this.viewH);
     this.clampOffsets();
 
+    const fixed: number[] = this.fixedIndices();
+    const normal: number[] = this.normalIndices();
+    const frozenW: number = this.frozenWidth();
+
     for (let r = 0; r < this.rows.length; r++) {
-      let y: number = r * ROW_H - this.offsetY;
+      const y: number = r * ROW_H - this.offsetY;
       if (y + ROW_H < 0 || y > this.viewH) {
         continue;
       }
-      let row: FeedData = this.rows[r];
+      const row: FeedData = this.rows[r];
 
-      // 冻结序号列
-      this.ctx.fillStyle = '#FFFFFF';
-      this.ctx.fillRect(0, y, FROZEN_W, ROW_H);
-      this.ctx.strokeStyle = '#000000';
-      this.ctx.lineWidth = 0.5;
-      this.ctx.strokeRect(0, y, FROZEN_W, ROW_H);
-      this.ctx.fillStyle = '#666666';
-      this.ctx.font = 'bold 12vp sans-serif';
-      this.ctx.textAlign = 'center';
-      this.ctx.textBaseline = 'middle';
-      this.ctx.fillText((r + 1).toString(), FROZEN_W / 2, y + ROW_H / 2);
-
-      // 其余列
       this.ctx.save();
       this.ctx.beginPath();
-      this.ctx.rect(FROZEN_W, 0, Math.max(0, this.viewW - FROZEN_W), this.viewH);
+      this.ctx.rect(frozenW, 0, Math.max(0, this.viewW - frozenW), this.viewH);
       this.ctx.clip();
-      for (let c = 1; c < WIDTHS.length; c++) {
-        let cx: number = this.xOfColumn(c) - this.offsetX;
-        if (cx + WIDTHS[c] <= FROZEN_W || cx > this.viewW) {
-          continue;
-        }
+      let cx: number = frozenW - this.offsetX;
+      for (let i = 0; i < normal.length; i++) {
+        const col: number = normal[i];
         this.ctx.fillStyle = '#FFFFFF';
-        this.ctx.fillRect(cx, y, WIDTHS[c], ROW_H);
+        this.ctx.fillRect(cx, y, WIDTHS[col], ROW_H);
         this.ctx.strokeStyle = '#000000';
         this.ctx.lineWidth = 0.5;
-        this.ctx.strokeRect(cx, y, WIDTHS[c], ROW_H);
-        let text: string = this.cellText(row, c);
+        this.ctx.strokeRect(cx, y, WIDTHS[col], ROW_H);
+        const text: string = col === 0 ? (r + 1).toString() : this.cellText(row, col);
         if (text.length > 0) {
-          this.ctx.fillStyle = this.cellColor(c);
+          this.ctx.fillStyle = this.cellColor(col);
           this.ctx.font = 'bold 12vp sans-serif';
           this.ctx.textAlign = 'center';
           this.ctx.textBaseline = 'middle';
-          this.ctx.fillText(text, cx + WIDTHS[c] / 2, y + ROW_H / 2);
+          this.ctx.fillText(text, cx + WIDTHS[col] / 2, y + ROW_H / 2);
         }
+        cx += WIDTHS[col];
       }
       this.ctx.restore();
+
+      let fx: number = 0;
+      for (let i = 0; i < fixed.length; i++) {
+        const col: number = fixed[i];
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillRect(fx, y, WIDTHS[col], ROW_H);
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 0.5;
+        this.ctx.strokeRect(fx, y, WIDTHS[col], ROW_H);
+        const text: string = col === 0 ? (r + 1).toString() : this.cellText(row, col);
+        if (text.length > 0) {
+          this.ctx.fillStyle = this.cellColor(col);
+          this.ctx.font = 'bold 12vp sans-serif';
+          this.ctx.textAlign = 'center';
+          this.ctx.textBaseline = 'middle';
+          this.ctx.fillText(text, fx + WIDTHS[col] / 2, y + ROW_H / 2);
+        }
+        fx += WIDTHS[col];
+      }
     }
-    // 冻结尾线
-    this.ctx.strokeStyle = '#000000';
-    this.ctx.lineWidth = 0.5;
-    this.ctx.beginPath();
-    this.ctx.moveTo(FROZEN_W, 0);
-    this.ctx.lineTo(FROZEN_W, this.viewH);
-    this.ctx.stroke();
   }
 
   private stopFling(): void {
@@ -627,17 +784,17 @@ export struct MixCalcTable {
     }
     let lastTime: number = Date.now();
     this.flingTimer = setInterval(() => {
-      let now: number = Date.now();
-      let dt: number = Math.min(0.05, (now - lastTime) / 1000);
+      const now: number = Date.now();
+      const dt: number = Math.min(0.05, (now - lastTime) / 1000);
       lastTime = now;
-      let decay: number = Math.exp(-4.5 * dt);
+      const decay: number = Math.exp(-4.5 * dt);
       velocityX *= decay;
       velocityY *= decay;
 
       let nextX: number = this.offsetX - velocityX * dt;
       let nextY: number = this.offsetY - velocityY * dt;
-      let maxX: number = this.maxOffsetX();
-      let maxY: number = this.maxOffsetY();
+      const maxX: number = this.maxOffsetX();
+      const maxY: number = this.maxOffsetY();
       if (nextX <= 0 || nextX >= maxX) {
         velocityX = 0;
         nextX = Math.min(Math.max(0, nextX), maxX);
@@ -667,40 +824,49 @@ export struct MixCalcTable {
   }
 
   build() {
-    Column() {
-      // ===== 表头（独立组件） =====
-      Row() {
-        Text(HEADS[0])
-          .width(FROZEN_W)
-          .height(HEAD_H)
-          .backgroundColor('#E8F5E9')
-          .zIndex(1)
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#000000')
-          .textAlign(TextAlign.Center)
-          .border({ width: 0.5, color: '#000000' })
-
+    Stack() {
+      Column() {
+      Stack({ alignContent: Alignment.TopStart }) {
         Row() {
-          ForEach(HEADS.slice(1), (title: string, index: number) => {
-            Text(title)
-              .width(WIDTHS[index + 1])
+          ForEach(this.normalIndices(), (col: number) => {
+            Text(HEADS[col])
+              .width(WIDTHS[col])
               .height(HEAD_H)
               .fontSize(12)
               .fontWeight(FontWeight.Bold)
               .fontColor('#000000')
               .textAlign(TextAlign.Center)
               .border({ width: 0.5, color: '#000000' })
-          }, (title: string, index: number) => title + index.toString())
+              .backgroundColor('#E8F5E9')
+              .gesture(LongPressGesture().onAction(() => {
+                this.showColumnMenu(col);
+              }))
+          }, (col: number) => 'h' + col.toString())
         }
-        .translate({ x: -this.offsetX })
+        .position({ x: this.frozenWidth() - this.offsetX, y: 0 })
+
+        Row() {
+          ForEach(this.fixedIndices(), (col: number) => {
+            Text(HEADS[col])
+              .width(WIDTHS[col])
+              .height(HEAD_H)
+              .fontSize(12)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#000000')
+              .textAlign(TextAlign.Center)
+              .border({ width: 0.5, color: '#000000' })
+              .backgroundColor('#E8F5E9')
+              .gesture(LongPressGesture().onAction(() => {
+                this.showColumnMenu(col);
+              }))
+          }, (col: number) => 'f' + col.toString())
+        }
       }
       .width('100%')
       .height(HEAD_H)
       .backgroundColor('#E8F5E9')
       .clip(true)
 
-      // ===== 表体 =====
       Canvas(this.ctx)
         .layoutWeight(1)
         .width('100%')
@@ -722,8 +888,8 @@ export struct MixCalcTable {
               this.lastPanY = 0;
             })
             .onActionUpdate((event: GestureEvent) => {
-              let dx: number = event.offsetX - this.lastPanX;
-              let dy: number = event.offsetY - this.lastPanY;
+              const dx: number = event.offsetX - this.lastPanX;
+              const dy: number = event.offsetY - this.lastPanY;
               this.lastPanX = event.offsetX;
               this.lastPanY = event.offsetY;
               this.offsetX -= dx;
@@ -735,52 +901,108 @@ export struct MixCalcTable {
             })
         )
         .onClick((event: ClickEvent) => {
-          let row: number = Math.floor((event.y + this.offsetY) / ROW_H);
+          const row: number = Math.floor((event.y + this.offsetY) / ROW_H);
           if (row < 0 || row >= this.rows.length) {
             return;
           }
           this.openEditor(row, this.columnAt(event.x));
         })
 
-      // ===== 表尾（独立组件） =====
-      Row() {
-        Text(this.footerText(0))
-          .width(FROZEN_W)
-          .height(FOOT_H)
-          .zIndex(1)
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#1F6B30')
-          .textAlign(TextAlign.Center)
-          .border({ width: 0.5, color: '#000000' })
-          .backgroundColor('#EAF3EC')
-
+      Stack({ alignContent: Alignment.TopStart }) {
         Row() {
-          ForEach(HEADS.slice(1), (title: string, index: number) => {
-            Text(this.footerText(index + 1))
-              .width(WIDTHS[index + 1])
+          ForEach(this.normalIndices(), (col: number) => {
+            Text(this.footerText(col))
+              .width(WIDTHS[col])
               .height(FOOT_H)
               .fontSize(12)
               .fontWeight(FontWeight.Bold)
-              .fontColor(this.footerColor(index + 1))
+              .fontColor(this.footerColor(col))
               .textAlign(TextAlign.Center)
               .border({ width: 0.5, color: '#000000' })
-              .backgroundColor(this.footerCellBg(index + 1))
+              .backgroundColor(this.footerCellBg(col))
               .onClick(() => {
-                if (index + 1 === 1) {
-                  this.showHelp();
-                } else if (index + 1 === 10) {
+                if (col === 1) {
+                  this.onHelp();
+                } else if (col === 10) {
                   this.confirmReset();
                 }
               })
-          }, (title: string, index: number) => title + index.toString())
+          }, (col: number) => 'hn' + col.toString())
         }
-        .translate({ x: -this.offsetX })
+        .position({ x: this.frozenWidth() - this.offsetX, y: 0 })
+
+        Row() {
+          ForEach(this.fixedIndices(), (col: number) => {
+            Text(this.footerText(col))
+              .width(WIDTHS[col])
+              .height(FOOT_H)
+              .fontSize(12)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.footerColor(col))
+              .textAlign(TextAlign.Center)
+              .border({ width: 0.5, color: '#000000' })
+              .backgroundColor(this.footerCellBg(col))
+              .onClick(() => {
+                if (col === 1) {
+                  this.onHelp();
+                } else if (col === 10) {
+                  this.confirmReset();
+                }
+              })
+          }, (col: number) => 'fn' + col.toString())
+        }
       }
       .width('100%')
       .height(FOOT_H)
       .backgroundColor('#EAF3EC')
       .clip(true)
+      }
+      .width('100%')
+      .height('100%')
+
+      if (this.colMenuOpen) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor('#00000000')
+          .onClick(() => {
+            this.colMenuOpen = false;
+          })
+
+        Column() {
+          Text(this.colMenuTitle)
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#000000')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 16, bottom: 12, left: 16, right: 16 })
+
+          Divider().strokeWidth(1).color('#E0E0E0')
+
+          ForEach(this.colMenuItems, (item: string, index: number) => {
+            Button(item)
+              .type(ButtonType.Normal)
+              .width('100%')
+              .height(40)
+              .borderRadius(0)
+              .backgroundColor(Color.Transparent)
+              .fontSize(15)
+              .fontColor('#333333')
+              .onClick(() => {
+                this.handleColumnChoice(index);
+              })
+            if (index < this.colMenuItems.length - 1) {
+              Divider().strokeWidth(1).color('#E0E0E0')
+            }
+          }, (item: string, index: number) => item + index.toString())
+        }
+        .width(200)
+        .backgroundColor(Color.White)
+        .borderRadius(12)
+        .clip(true)
+        .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
+        .position({ x: this.colMenuX, y: HEAD_H })
+      }
     }
     .width('100%')
     .height('100%')

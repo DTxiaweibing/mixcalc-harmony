@@ -8,6 +8,8 @@ import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
 const PREF_NAME: string = 'MixCalcPrefs';
 const ROW_COUNT: number = 30;
 const TITLE_BASE: string = '养虾拌料计算器';
+const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
+const COLUMN_HEADS: string[] = ['序号', '棚号', '棚数', '平均', '发酵料', '粉料', '0.3料', '0.5料', '1.0料', '水', '称料'];
 
 class MenuItem {
   label: string;
@@ -101,6 +103,63 @@ struct Index {
     this.saveAll();
   }
 
+  private visibleMask(): boolean[] {
+    const batch: Batch = this.currentBatch();
+    const result: boolean[] = [];
+    for (let i = 0; i < COLUMN_IDS.length; i++) {
+      result.push(i === 0 ? true : batch.columnVisibility[COLUMN_IDS[i]] !== false);
+    }
+    return result;
+  }
+
+  private fixedMask(): boolean[] {
+    const batch: Batch = this.currentBatch();
+    const result: boolean[] = [];
+    for (let i = 0; i < COLUMN_IDS.length; i++) {
+      result.push(i === 0 ? true : batch.columnFixed[COLUMN_IDS[i]] === true);
+    }
+    return result;
+  }
+
+  private rebuildTable(): void {
+    this.ready = false;
+    setTimeout(() => {
+      this.ready = true;
+    }, 50);
+  }
+
+  private handleColumnAction(action: string, index: number): void {
+    if (this.batches.length === 0 || index < 0 || index >= COLUMN_IDS.length) {
+      return;
+    }
+    const batch: Batch = this.currentBatch();
+    const id: string = COLUMN_IDS[index];
+    if (id === 'seq') {
+      return;
+    }
+    if (action === 'toggle-fixed') {
+      const next: boolean = batch.columnFixed[id] !== true;
+      batch.columnFixed[id] = next;
+      this.toast(COLUMN_HEADS[index] + (next ? '列已固定' : '列已取消固定'));
+    } else if (action === 'toggle-visible') {
+      const next: boolean = batch.columnVisibility[id] === false;
+      batch.columnVisibility[id] = next;
+      this.toast(COLUMN_HEADS[index] + (next ? '列已显示' : '列已隐藏'));
+    } else if (action === 'show-all') {
+      for (let i = 1; i < COLUMN_IDS.length; i++) {
+        batch.columnVisibility[COLUMN_IDS[i]] = true;
+      }
+      this.toast('所有列已显示');
+    } else if (action === 'unfix-all') {
+      for (let i = 1; i < COLUMN_IDS.length; i++) {
+        batch.columnFixed[COLUMN_IDS[i]] = false;
+      }
+      this.toast('已取消所有固定');
+    }
+    this.saveAll();
+    this.rebuildTable();
+  }
+
   private toast(message: string): void {
     promptAction.showToast({ message: message, duration: 2000 });
   }
@@ -182,11 +241,16 @@ struct Index {
             waterPercentage: this.currentBatch().waterPercentage,
             fermentedInWater: this.currentBatch().fermentedInWater,
             fermentedInAverage: this.currentBatch().fermentedInAverage,
+            visibleMask: this.visibleMask(),
+            fixedMask: this.fixedMask(),
             onChanged: () => {
               this.saveAll();
             },
             onHelp: () => {
               this.openPage('help/index.html');
+            },
+            onColumnAction: (action: string, index: number) => {
+              this.handleColumnAction(action, index);
             }
           })
             .layoutWeight(1)
