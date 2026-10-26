@@ -19,6 +19,7 @@ export struct MixCalcTable {
   private offsetY: number = 0;
   private lastPanX: number = 0;
   private lastPanY: number = 0;
+  private flingTimer: number = -1;
   private widthVp: number = 0;
   private heightVp: number = 0;
   private frozenW: number = 40;
@@ -199,15 +200,67 @@ export struct MixCalcTable {
     return s;
   }
 
+  private filledRows(): number {
+    let n: number = 0;
+    for (let i = 0; i < this.rows.length; i++) {
+      if (this.rows[i].shedCount > 0) {
+        n++;
+      }
+    }
+    return n;
+  }
+
+  private weightedAverage(): number {
+    let sheds: number = 0;
+    let total: number = 0;
+    for (let i = 0; i < this.rows.length; i++) {
+      let r: FeedData = this.rows[i];
+      if (r.average > 0 && r.shedCount > 0) {
+        sheds += r.shedCount;
+        total += r.average * r.shedCount;
+      }
+    }
+    return sheds > 0 ? total / sheds : 0;
+  }
+
+  private formatSum(value: number): string {
+    if (value === 0) {
+      return '0';
+    }
+    if (value === Math.floor(value)) {
+      return Math.floor(value).toString();
+    }
+    return value.toFixed(2);
+  }
+
+  private footerText(c: number): string {
+    switch (c) {
+      case 0: return this.filledRows().toString() + '/' + this.rows.length.toString();
+      case 1: return '帮助';
+      case 3: return this.formatSum(this.weightedAverage());
+      case 10: return '重置';
+      default: return this.formatSum(this.sumColumn(c));
+    }
+  }
+
+  private footerColor(c: number): string {
+    if (c === 1) {
+      return '#0000FF';
+    }
+    if (c === 10) {
+      return '#960018';
+    }
+    return this.footText;
+  }
   private drawFooter(): void {
     let y: number = this.heightVp - this.metrics.footH;
     this.ctx.fillStyle = this.footBg;
     this.ctx.fillRect(0, y, this.widthVp, this.metrics.footH);
 
-    // 首列（合计标签）不参与横向偏移
+    // 首列（已填行数/总行数）不参与横向偏移
     this.ctx.fillStyle = this.footBg;
     this.ctx.fillRect(0, y, this.frozenW, this.metrics.footH);
-    this.drawCell(0, y, this.frozenW, this.metrics.footH, '合计', this.footText);
+    this.drawCell(0, y, this.frozenW, this.metrics.footH, this.footerText(0), this.footerColor(0));
 
     this.ctx.save();
     this.ctx.beginPath();
@@ -218,14 +271,61 @@ export struct MixCalcTable {
     for (let c = 1; c < this.metrics.widths.length; c++) {
       let cx: number = x - this.offsetX;
       let w: number = this.metrics.widths[c];
-      let sum: number = this.sumColumn(c);
-      let text: string = sum > 0 ? (c === 2 ? sum.toFixed(0) : sum.toFixed(2)) : '';
       this.ctx.fillStyle = this.footBg;
       this.ctx.fillRect(cx, y, w, this.metrics.footH);
-      this.drawCell(cx, y, w, this.metrics.footH, text, this.footText);
+      this.drawCell(cx, y, w, this.metrics.footH, this.footerText(c), this.footerColor(c));
       x += w;
     }
     this.ctx.restore();
+  }
+
+  private stopFling(): void {
+    if (this.flingTimer !== -1) {
+      clearInterval(this.flingTimer);
+      this.flingTimer = -1;
+    }
+  }
+
+  /** 松手后的惯性滑动：指数衰减，撞到边界即停该轴。 */
+  private startFling(vx: number, vy: number): void {
+    this.stopFling();
+    let velocityX: number = vx;
+    let velocityY: number = vy;
+    if (Math.abs(velocityX) < 60 && Math.abs(velocityY) < 60) {
+      return;
+    }
+    let lastTime: number = Date.now();
+    this.flingTimer = setInterval(() => {
+      let now: number = Date.now();
+      let dt: number = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+      let decay: number = Math.exp(-4.5 * dt);
+      velocityX *= decay;
+      velocityY *= decay;
+
+      let nextX: number = this.offsetX - velocityX * dt;
+      let nextY: number = this.offsetY - velocityY * dt;
+      let maxX: number = this.maxOffsetX();
+      let maxY: number = this.maxOffsetY();
+      if (nextX <= 0 || nextX >= maxX) {
+        velocityX = 0;
+        nextX = Math.min(Math.max(0, nextX), maxX);
+      }
+      if (nextY <= 0 || nextY >= maxY) {
+        velocityY = 0;
+        nextY = Math.min(Math.max(0, nextY), maxY);
+      }
+      this.offsetX = nextX;
+      this.offsetY = nextY;
+      this.draw();
+      if (Math.abs(velocityX) < 15 && Math.abs(velocityY) < 15) {
+        this.stopFling();
+      }
+    }, 16);
+  }
+
+  aboutToDisappear(): void {
+    this.stopFling();
   }
 
   private draw(): void {
@@ -258,8 +358,12 @@ export struct MixCalcTable {
       .gesture(
         PanGesture()
           .onActionStart(() => {
+            this.stopFling();
             this.lastPanX = 0;
             this.lastPanY = 0;
+          })
+          .onActionEnd((event: GestureEvent) => {
+            this.startFling(event.velocityX, event.velocityY);
           })
           .onActionUpdate((event: GestureEvent) => {
             let dx: number = event.offsetX - this.lastPanX;
