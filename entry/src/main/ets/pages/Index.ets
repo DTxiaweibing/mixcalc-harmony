@@ -117,12 +117,16 @@ struct Index {
 
   @Builder
   menuRow(item: MenuItem, isLast: boolean) {
-    Text(item.label)
+    Button(item.label)
+      .type(ButtonType.Normal)
       .width('100%')
       .height(39)
+      .borderRadius(0)
+      .backgroundColor(Color.Transparent)
       .fontSize(18)
       .fontColor(item.label.startsWith('版本') ? '#999999' : '#333333')
-      .textAlign(TextAlign.Center)
+      .stateEffect(!item.label.startsWith('版本'))
+      .enabled(!item.label.startsWith('版本'))
       .onClick(() => {
         this.menuOpen = false;
         item.action();
