@@ -176,33 +176,51 @@ export struct MixCalcTable {
     return value === 0 ? '' : value.toFixed(2);
   }
 
+  private nfIndexOf(column: number): number {
+    switch (column) {
+      case 5: return 0;
+      case 6: return 1;
+      case 7: return 2;
+      case 8: return 3;
+      default: return -1;
+    }
+  }
+
   private applyEdit(text: string): void {
     if (this.editRow < 0 || this.editCol < 0) {
       return;
     }
     let row: FeedData = this.rows[this.editRow];
     let value: string = text.trim();
-    if (this.editCol === 1) {
-      row.shedNumber = value;
-      row.isShedCountManuallyModified = false;
-    } else {
-      let number: number = value.length === 0 ? 0 : Number(value);
-      if (isNaN(number)) {
-        number = 0;
+    let col: number = this.editCol;
+    let number: number = value.length === 0 ? 0 : Number(value);
+    if (isNaN(number)) {
+      number = 0;
+    }
+
+    if (col === 1) {
+      row.setShedNumber(value);
+      if (value.length === 0) {
+        this.clearRowData(row, true);
       }
-      switch (this.editCol) {
-        case 2:
-          row.shedCount = Math.round(number);
-          row.isShedCountManuallyModified = true;
-          if (this.editRow === 0) {
-            row.shedCountBase = row.shedCount;
-            row.shedCountBaseSum = this.sumBelowFirst();
-          }
-          break;
-        case 3:
-          row.average = number;
-          row.isAverageManuallyModified = value.length > 0;
-          break;
+    } else if (col === 2) {
+      let newCount: number = Math.round(number);
+      row.shedCount = newCount;
+      row.isShedCountManuallyModified = !(newCount === 0 || value.length === 0);
+      if (this.editRow === 0) {
+        row.shedCountBase = newCount;
+        row.shedCountBaseSum = this.sumBelowFirst();
+      }
+    } else if (col === 3) {
+      row.setAverageManually(number, this.fermentedInAverage);
+    } else {
+      let nfIndex: number = this.nfIndexOf(col);
+      let origin: number = nfIndex >= 0 ? row.getNonFermentedValue(nfIndex) : 0;
+      row.isAverageManuallyModified = false;
+      if (number === 0 && nfIndex >= 0) {
+        row.mergeSmallerWhenCleared(nfIndex, origin);
+      }
+      switch (col) {
         case 4: row.fermented = number; break;
         case 5: row.powder = number; break;
         case 6: row.feed03 = number; break;
@@ -210,10 +228,47 @@ export struct MixCalcTable {
         case 8: row.feed10 = number; break;
         default: break;
       }
+      row.switchRatio = 0;
     }
-    row.updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+
+    // 安卓 applyRowChange：第 2 行起，没有棚数就清空料格
+    if (this.editRow !== 0 && row.shedCount <= 0) {
+      row.fermented = 0;
+      row.powder = 0;
+      row.feed03 = 0;
+      row.feed05 = 0;
+      row.feed10 = 0;
+      row.water = 0;
+      row.weighed = 0;
+      row.average = 0;
+      row.isAverageManuallyModified = false;
+      row.switchRatio = 0;
+    }
+
+    if (this.editRow !== 0) {
+      row.updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+    }
     this.recomputeFirstRow();
     this.draw();
+  }
+
+  /** 清空一行数据；keepShedNumber 为 true 时保留棚号。 */
+  private clearRowData(row: FeedData, clearShedNumber: boolean): void {
+    if (clearShedNumber) {
+      row.shedNumber = '';
+    }
+    row.shedCount = 0;
+    row.average = 0;
+    row.fermented = 0;
+    row.powder = 0;
+    row.feed03 = 0;
+    row.feed05 = 0;
+    row.feed10 = 0;
+    row.water = 0;
+    row.weighed = 0;
+    row.shedCountBase = 0;
+    row.shedCountBaseSum = 0;
+    row.isAverageManuallyModified = false;
   }
 
   private showHelp(): void {
