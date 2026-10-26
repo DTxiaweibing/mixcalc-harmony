@@ -21,6 +21,43 @@ export class FeedData {
   isShedCountManuallyModified: boolean = false;
   isAverageManuallyModified: boolean = false;
 
+  toJson(): Record<string, Object> {
+    return {
+      'shedNumber': this.shedNumber,
+      'shedCount': this.shedCount,
+      'shedCountBase': this.shedCountBase,
+      'shedCountBaseSum': this.shedCountBaseSum,
+      'average': this.average,
+      'fermented': this.fermented,
+      'powder': this.powder,
+      'feed03': this.feed03,
+      'feed05': this.feed05,
+      'feed10': this.feed10,
+      'water': this.water,
+      'weighed': this.weighed,
+      'switchRatio': this.switchRatio,
+      'isShedCountManuallyModified': this.isShedCountManuallyModified,
+      'isAverageManuallyModified': this.isAverageManuallyModified
+    };
+  }
+
+  fromJson(obj: Record<string, Object>): void {
+    this.shedNumber = obj['shedNumber'] as string;
+    this.shedCount = obj['shedCount'] as number;
+    this.shedCountBase = obj['shedCountBase'] as number;
+    this.shedCountBaseSum = obj['shedCountBaseSum'] as number;
+    this.average = obj['average'] as number;
+    this.fermented = obj['fermented'] as number;
+    this.powder = obj['powder'] as number;
+    this.feed03 = obj['feed03'] as number;
+    this.feed05 = obj['feed05'] as number;
+    this.feed10 = obj['feed10'] as number;
+    this.water = obj['water'] as number;
+    this.weighed = obj['weighed'] as number;
+    this.switchRatio = obj['switchRatio'] as number;
+    this.isShedCountManuallyModified = obj['isShedCountManuallyModified'] as boolean;
+    this.isAverageManuallyModified = obj['isAverageManuallyModified'] as boolean;
+  }
   setShedNumber(value: string): void {
     this.shedNumber = value;
     if (!this.isShedCountManuallyModified) {

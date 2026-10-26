@@ -74,6 +74,7 @@ export struct MixCalcTable {
   private metrics: Metrics = new Metrics();
 
   rows: FeedData[] = [];
+  onChanged: () => void = () => {};
   private offsetX: number = 0;
   private offsetY: number = 0;
   private lastPanX: number = 0;
