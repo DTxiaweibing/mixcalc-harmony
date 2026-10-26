@@ -4,12 +4,15 @@ import { common } from '@kit.AbilityKit';
 import { promptAction, router, display } from '@kit.ArkUI';
 import { Batch } from '../model/Batch';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
+import { t } from '../common/Strings';
+import { i18n } from '@kit.LocalizationKit';
 
 const PREF_NAME: string = 'MixCalcPrefs';
 const ROW_COUNT: number = 30;
 const TITLE_BASE: string = '养虾拌料计算器';
 const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
 const COLUMN_HEADS: string[] = ['序号', '棚号', '棚数', '平均', '发酵料', '粉料', '0.3料', '0.5料', '1.0料', '水', '称料'];
+const COLUMN_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
 
 class MenuItem {
   label: string;
@@ -34,30 +37,34 @@ struct Index {
   @State screenW: number = 360;
   @State settingsOpen: boolean = false;
   @State settingsVersion: number = 0;
+  @State lang: string = 'zh';
+  @State langPref: string = '';
+  @State langOpen: boolean = false;
 
-  private menuItems: MenuItem[] = [
-    new MenuItem('快捷设置', () => {
-      this.openSettings();
-    }),
-    new MenuItem('批次切换', () => {
-      this.batchMenuOpen = !this.batchMenuOpen;
-    }),
-    new MenuItem('隐私政策', () => {
-      this.openPage('privacy.html');
-    }),
-    new MenuItem('用户协议', () => {
-      this.openPage('user.html');
-    }),
-    new MenuItem('使用帮助', () => {
-      this.openPage('help/index.html');
-    }),
-    new MenuItem('选择语言', () => {
-      this.toast('中英文切换：下一步实现');
-    }),
-    new MenuItem('版本:v1.0.0', () => {
-    })
-  ];
-
+  private menuItems(): MenuItem[] {
+    return [
+      new MenuItem(t(this.lang, 'menu.quick'), () => {
+        this.openSettings();
+      }),
+      new MenuItem(t(this.lang, 'menu.batch'), () => {
+        this.batchMenuOpen = !this.batchMenuOpen;
+      }),
+      new MenuItem(t(this.lang, 'menu.privacy'), () => {
+        this.openPage('privacy.html');
+      }),
+      new MenuItem(t(this.lang, 'menu.terms'), () => {
+        this.openPage('user.html');
+      }),
+      new MenuItem(t(this.lang, 'menu.help'), () => {
+        this.openPage('help/index.html');
+      }),
+      new MenuItem(t(this.lang, 'menu.lang'), () => {
+        this.langOpen = true;
+      }),
+      new MenuItem(t(this.lang, 'menu.version'), () => {
+      })
+    ];
+  }
   async aboutToAppear(): Promise<void> {
     try {
       const ctx = getContext(this) as common.UIAbilityContext;
@@ -68,6 +75,23 @@ struct Index {
       this.batches = [];
       for (let i = 0; i < BATCH_COUNT; i++) {
         this.batches.push(new Batch(ROW_COUNT));
+      }
+    }
+    let saved: string = '';
+    try {
+      saved = await this.store!.get('app_language', '') as string;
+    } catch (e) {
+      saved = '';
+    }
+    this.langPref = saved;
+    if (saved === 'en' || saved === 'zh') {
+      this.lang = saved;
+    } else {
+      try {
+        const sys: string = i18n.System.getSystemLanguage();
+        this.lang = sys.startsWith('zh') ? 'zh' : 'en';
+      } catch (e) {
+        this.lang = 'zh';
       }
     }
     this.ready = true;
@@ -102,7 +126,6 @@ struct Index {
     this.activeBatch = index;
     this.ready = false;
     setTimeout(() => {
-      this.ready = true;
     }, 50);
     this.saveAll();
   }
@@ -151,7 +174,7 @@ struct Index {
     this.settingsOpen = false;
     this.saveAll();
     this.rebuildTable();
-    this.toast('列设置已保存');
+    this.toast(t(this.lang, 'toast.saved'));
   }
 
   private setColumnFixed(col: number, fixed: boolean): void {
@@ -220,24 +243,44 @@ struct Index {
     if (action === 'toggle-fixed') {
       const next: boolean = batch.columnFixed[id] !== true;
       batch.columnFixed[id] = next;
-      this.toast(COLUMN_HEADS[index] + (next ? '列已固定' : '列已取消固定'));
+      this.toast(COLUMN_HEADS[index] + t(this.lang, next ? 'toast.fixed' : 'toast.unfixed'));
     } else if (action === 'toggle-visible') {
       const next: boolean = batch.columnVisibility[id] === false;
       batch.columnVisibility[id] = next;
-      this.toast(COLUMN_HEADS[index] + (next ? '列已显示' : '列已隐藏'));
+      this.toast(COLUMN_HEADS[index] + t(this.lang, next ? 'toast.shown' : 'toast.hidden'));
     } else if (action === 'show-all') {
       for (let i = 1; i < COLUMN_IDS.length; i++) {
         batch.columnVisibility[COLUMN_IDS[i]] = true;
       }
-      this.toast('所有列已显示');
+      this.toast(t(this.lang, 'toast.allShown'));
     } else if (action === 'unfix-all') {
       for (let i = 1; i < COLUMN_IDS.length; i++) {
         batch.columnFixed[COLUMN_IDS[i]] = false;
       }
-      this.toast('已取消所有固定');
+      this.toast(t(this.lang, 'toast.allUnfixed'));
     }
     this.saveAll();
     this.rebuildTable();
+  }
+
+  private selectLanguage(pref: string): void {
+    this.langPref = pref;
+    if (pref === 'en' || pref === 'zh') {
+      this.lang = pref;
+    } else {
+      try {
+        const sys: string = i18n.System.getSystemLanguage();
+        this.lang = sys.startsWith('zh') ? 'zh' : 'en';
+      } catch (e) {
+        this.lang = 'zh';
+      }
+    }
+    this.langOpen = false;
+    if (this.store !== null) {
+      this.store.put('app_language', pref).then(() => {
+        this.store?.flush();
+      });
+    }
   }
 
   private toast(message: string): void {
@@ -302,7 +345,7 @@ struct Index {
               this.batchMenuOpen = false;
             })
 
-          Text(this.activeBatch === 0 ? TITLE_BASE : TITLE_BASE + ' 02')
+          Text(this.activeBatch === 0 ? t(this.lang, 'title') : t(this.lang, 'title') + ' 02')
             .fontSize(20)
             .fontColor(Color.White)
             .layoutWeight(1)
@@ -321,6 +364,7 @@ struct Index {
             waterPercentage: this.currentBatch().waterPercentage,
             fermentedInWater: this.currentBatch().fermentedInWater,
             fermentedInAverage: this.currentBatch().fermentedInAverage,
+            lang: this.lang,
             visibleMask: this.visibleMask(),
             fixedMask: this.fixedMask(),
             onChanged: () => {
@@ -352,7 +396,7 @@ struct Index {
           })
 
         Column() {
-          ForEach(this.menuItems, (item: MenuItem, index: number) => {
+          ForEach(this.menuItems(), (item: MenuItem, index: number) => {
             this.menuRow(item, index === this.menuItems.length - 1)
           }, (item: MenuItem) => item.label)
         }
@@ -363,7 +407,7 @@ struct Index {
 
         if (this.batchMenuOpen) {
           Column() {
-            Text('选择批次')
+            Text(t(this.lang, 'batch.select'))
               .width('100%')
               .fontSize(18)
               .fontWeight(FontWeight.Bold)
@@ -416,11 +460,11 @@ struct Index {
 
         Column() {
           Row() {
-            Text('列名').layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
-            Text('固列').layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
-            Text('解固').layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
-            Text('隐列').layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
-            Text('显列').layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+            Text(t(this.lang, 'set.name')).layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+            Text(t(this.lang, 'set.fix')).layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+            Text(t(this.lang, 'set.unfix')).layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+            Text(t(this.lang, 'set.hide')).layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+            Text(t(this.lang, 'set.show')).layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
           }
           .width('100%')
           .height(40)
@@ -428,21 +472,21 @@ struct Index {
 
           ForEach(this.settingsColumns(), (col: number) => {
             Row() {
-              Text(COLUMN_HEADS[col])
+              Text(t(this.lang, COLUMN_KEYS[col]))
                 .layoutWeight(1)
                 .fontSize(14)
                 .fontColor('#333333')
                 .textAlign(TextAlign.Center)
-              this.settingCell('固列', this.colFixed(col), () => {
+              this.settingCell(t(this.lang, 'set.fix'), this.colFixed(col), () => {
                 this.setColumnFixed(col, true);
               })
-              this.settingCell('解固', !this.colFixed(col), () => {
+              this.settingCell(t(this.lang, 'set.unfix'), !this.colFixed(col), () => {
                 this.setColumnFixed(col, false);
               })
-              this.settingCell('隐列', !this.colVisible(col), () => {
+              this.settingCell(t(this.lang, 'set.hide'), !this.colVisible(col), () => {
                 this.setColumnVisible(col, false);
               })
-              this.settingCell('显列', this.colVisible(col), () => {
+              this.settingCell(t(this.lang, 'set.show'), this.colVisible(col), () => {
                 this.setColumnVisible(col, true);
               })
             }
@@ -459,7 +503,7 @@ struct Index {
             .color('#E0E0E0')
 
           Row() {
-            Text('全取消')
+            Text(t(this.lang, 'set.cancelAll'))
               .layoutWeight(1)
               .height(32)
               .fontSize(13)
@@ -470,7 +514,7 @@ struct Index {
               .onClick(() => {
                 this.closeSettings();
               })
-            Text('全解固')
+            Text(t(this.lang, 'set.unfixAll'))
               .layoutWeight(1)
               .height(32)
               .fontSize(13)
@@ -482,7 +526,7 @@ struct Index {
               .onClick(() => {
                 this.panelUnfixAll();
               })
-            Text('列全显')
+            Text(t(this.lang, 'set.showAll'))
               .layoutWeight(1)
               .height(32)
               .fontSize(13)
@@ -494,7 +538,7 @@ struct Index {
               .onClick(() => {
                 this.panelShowAll();
               })
-            Text('全确认')
+            Text(t(this.lang, 'set.confirm'))
               .layoutWeight(1)
               .height(32)
               .fontSize(13)
@@ -515,6 +559,87 @@ struct Index {
         .backgroundColor(Color.White)
         .shadow({ radius: 8, color: '#40000000', offsetX: 0, offsetY: 2 })
         .position({ x: 0, y: 40 })
+      }
+
+      if (this.langOpen) {
+        Stack({ alignContent: Alignment.Center }) {
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor('#66000000')
+            .onClick(() => {
+              this.langOpen = false;
+            })
+
+          Column() {
+            Text(t(this.lang, 'lang.title'))
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#000000')
+              .textAlign(TextAlign.Center)
+              .padding({ top: 16, bottom: 12, left: 16, right: 16 })
+
+            Divider().strokeWidth(1).color('#E0E0E0')
+
+            Text(this.langPref === ''
+              ? t(this.lang, 'lang.system') + ' ✓'
+              : t(this.lang, 'lang.system'))
+              .width('100%')
+              .height(44)
+              .fontSize(16)
+              .fontColor('#333333')
+              .textAlign(TextAlign.Center)
+              .onClick(() => {
+                this.selectLanguage('');
+              })
+
+            Divider().strokeWidth(1).color('#E0E0E0')
+
+            Text(this.langPref === 'zh'
+              ? t(this.lang, 'lang.zh') + ' ✓'
+              : t(this.lang, 'lang.zh'))
+              .width('100%')
+              .height(44)
+              .fontSize(16)
+              .fontColor('#333333')
+              .textAlign(TextAlign.Center)
+              .onClick(() => {
+                this.selectLanguage('zh');
+              })
+
+            Divider().strokeWidth(1).color('#E0E0E0')
+
+            Text(this.langPref === 'en'
+              ? t(this.lang, 'lang.en') + ' ✓'
+              : t(this.lang, 'lang.en'))
+              .width('100%')
+              .height(44)
+              .fontSize(16)
+              .fontColor('#333333')
+              .textAlign(TextAlign.Center)
+              .onClick(() => {
+                this.selectLanguage('en');
+              })
+
+            Divider().strokeWidth(1).color('#E0E0E0')
+
+            Text(t(this.lang, 'btn.cancel'))
+              .width('100%')
+              .height(44)
+              .fontSize(16)
+              .fontColor('#666666')
+              .textAlign(TextAlign.Center)
+              .onClick(() => {
+                this.langOpen = false;
+              })
+          }
+          .width(280)
+          .backgroundColor(Color.White)
+          .borderRadius(12)
+          .clip(true)
+        }
+        .width('100%')
+        .height('100%')
       }
 
     }

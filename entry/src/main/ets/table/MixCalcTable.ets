@@ -1,7 +1,9 @@
 import { FeedData } from '../model/FeedData';
+import { t } from '../common/Strings';
 
 const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
 const HEADS: string[] = ['序号', '棚号', '棚数', '平均', '发酵料', '粉料', '0.3料', '0.5料', '1.0料', '水', '称料'];
+const HEAD_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
 const WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
 const ROW_H: number = 40;
 const HEAD_H: number = 40;
@@ -206,6 +208,7 @@ export struct MixCalcTable {
   visibleMask: boolean[] = [];
   fixedMask: boolean[] = [];
 
+  @Prop lang: string = 'zh';
   waterPercentage: number = 20;
   fermentedInWater: boolean = false;
   fermentedInAverage: boolean = false;
@@ -259,7 +262,10 @@ export struct MixCalcTable {
   @State colMenuItems: string[] = [];
   private colMenuIndex: number = -1;
 
-  private isVisible(index: number): boolean {
+
+  private headLabel(col: number): string {
+    return t(this.lang, HEAD_KEYS[col]);
+  }  private isVisible(index: number): boolean {
     if (index === 0) {
       return true;
     }
@@ -431,9 +437,9 @@ export struct MixCalcTable {
   private footerText(c: number): string {
     switch (c) {
       case 0: return this.filledRows().toString() + '/' + this.rows.length.toString();
-      case 1: return '帮助';
+      case 1: return t(this.lang, 'footer.help');
       case 3: return this.formatSum(this.weightedAverage());
-      case 10: return '重置';
+      case 10: return t(this.lang, 'footer.reset');
       default: return this.formatSum(this.sumColumn(c));
     }
   }
@@ -668,7 +674,7 @@ export struct MixCalcTable {
     this.stopFling();
     this.editRow = row;
     this.editCol = column;
-    this.editorTitle = HEADS[column] + ' · 第' + (row + 1).toString() + '行';
+    this.editorTitle = this.headLabel(column) + ' · ' + t(this.lang, 'dlg.row').replace('%d', (row + 1).toString());
     this.editorValue = this.currentValue(row, column);
     this.editorIsNumber = column !== 1;
     this.editorController.open();
@@ -701,12 +707,12 @@ export struct MixCalcTable {
     const fixed: boolean = this.isFixed(index);
     const visible: boolean = this.isVisible(index);
     this.colMenuIndex = index;
-    this.colMenuTitle = '列操作 - ' + HEADS[index];
+    this.colMenuTitle = t(this.lang, 'dlg.colOps') + this.headLabel(index);
     this.colMenuItems = [
-      fixed ? '取消固定此列' : '固定此列',
-      visible ? '隐藏此列' : '显示此列',
-      '显示所有列',
-      '取消所有固定'
+      fixed ? t(this.lang, 'col.unfix') : t(this.lang, 'col.fix'),
+      visible ? t(this.lang, 'col.hide') : t(this.lang, 'col.show'),
+      t(this.lang, 'col.showAll'),
+      t(this.lang, 'col.unfixAllCols')
     ];
     const maxX: number = Math.max(0, this.viewW - 200);
     this.colMenuX = Math.max(0, Math.min(this.columnLeft(index), maxX));
@@ -872,7 +878,7 @@ export struct MixCalcTable {
       Stack({ alignContent: Alignment.TopStart }) {
         Row() {
           ForEach(this.normalIndices(), (col: number) => {
-            Text(HEADS[col])
+            Text(this.headLabel(col))
               .width(WIDTHS[col])
               .height(HEAD_H)
               .fontSize(12)
@@ -890,7 +896,7 @@ export struct MixCalcTable {
 
         Row() {
           ForEach(this.fixedIndices(), (col: number) => {
-            Text(HEADS[col])
+            Text(this.headLabel(col))
               .width(WIDTHS[col])
               .height(HEAD_H)
               .fontSize(12)
