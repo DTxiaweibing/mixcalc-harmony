@@ -459,6 +459,40 @@ export struct MixCalcTable {
     return column >= 1 && column <= 8;
   }
 
+  /** 与安卓 isCellEnabled 一致：棚号/棚数恒可编辑；平均看能否手改；料格要有棚数。 */
+  private isCellEnabled(data: FeedData, column: number): boolean {
+    if (column === 1 || column === 2) {
+      return true;
+    }
+    if (column === 3) {
+      return data.canEditAverage();
+    }
+    if (column >= 4 && column <= 8) {
+      return data.shedCount > 0;
+    }
+    return false;
+  }
+
+  private cellFillColor(data: FeedData, column: number): string {
+    if (column === 3 && !data.canEditAverage()) {
+      return '#F0F0F0';
+    }
+    if (column >= 4 && column <= 8 && data.shedCount <= 0) {
+      return '#F0F0F0';
+    }
+    return '#FFFFFF';
+  }
+
+  private cellStrokeColor(data: FeedData, column: number): string {
+    if (column === 3 && !data.canEditAverage()) {
+      return '#CCCCCC';
+    }
+    if (column >= 4 && column <= 8 && data.shedCount <= 0) {
+      return '#CCCCCC';
+    }
+    return '#000000';
+  }
+
   private nfIndexOf(column: number): number {
     switch (column) {
       case 5: return 0;
@@ -622,6 +656,9 @@ export struct MixCalcTable {
     if (!this.isEditableColumn(column) || row < 0 || row >= this.rows.length) {
       return;
     }
+    if (!this.isCellEnabled(this.rows[row], column)) {
+      return;
+    }
     this.stopFling();
     this.editRow = row;
     this.editCol = column;
@@ -730,9 +767,9 @@ export struct MixCalcTable {
       let cx: number = frozenW - this.offsetX;
       for (let i = 0; i < normal.length; i++) {
         const col: number = normal[i];
-        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillStyle = this.cellFillColor(row, col);
         this.ctx.fillRect(cx, y, WIDTHS[col], ROW_H);
-        this.ctx.strokeStyle = '#000000';
+        this.ctx.strokeStyle = this.cellStrokeColor(row, col);
         this.ctx.lineWidth = 0.5;
         this.ctx.strokeRect(cx, y, WIDTHS[col], ROW_H);
         const text: string = col === 0 ? (r + 1).toString() : this.cellText(row, col);
@@ -750,9 +787,9 @@ export struct MixCalcTable {
       let fx: number = 0;
       for (let i = 0; i < fixed.length; i++) {
         const col: number = fixed[i];
-        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillStyle = this.cellFillColor(row, col);
         this.ctx.fillRect(fx, y, WIDTHS[col], ROW_H);
-        this.ctx.strokeStyle = '#000000';
+        this.ctx.strokeStyle = this.cellStrokeColor(row, col);
         this.ctx.lineWidth = 0.5;
         this.ctx.strokeRect(fx, y, WIDTHS[col], ROW_H);
         const text: string = col === 0 ? (r + 1).toString() : this.cellText(row, col);
