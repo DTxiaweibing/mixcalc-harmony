@@ -9,6 +9,8 @@ export class FeedData {
   feed10: number = 0;
   water: number = 0;
   weighed: number = 0;
+  shedCountBase: number = 0;
+  shedCountBaseSum: number = 0;
   isShedCountManuallyModified: boolean = false;
   isAverageManuallyModified: boolean = false;
 
@@ -85,6 +87,16 @@ export class FeedData {
   calculateWeighedFeed(): void {
     let total: number = this.nonFermentedSum() + this.water + this.fermented;
     this.weighed = this.shedCount > 0 ? total / this.shedCount : 0;
+  }
+
+  /** 只重算派生值，棚数不动。 */
+  recalculateDerivedOnly(waterPercentage: number, fermentedInWater: boolean,
+                         fermentedInAverage: boolean): void {
+    if (!this.isAverageManuallyModified) {
+      this.calculateAverage(fermentedInAverage);
+    }
+    this.calculateWater(waterPercentage, fermentedInWater);
+    this.calculateWeighedFeed();
   }
 
   updateAllCalculations(waterPercentage: number, fermentedInWater: boolean,

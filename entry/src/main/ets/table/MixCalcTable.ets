@@ -22,6 +22,7 @@ struct CellEditorDialog {
     this.input = this.initValue;
   }
 
+
   build() {
     Column() {
       Text(this.title)
@@ -193,6 +194,10 @@ export struct MixCalcTable {
         case 2:
           row.shedCount = Math.round(number);
           row.isShedCountManuallyModified = true;
+          if (this.editRow === 0) {
+            row.shedCountBase = row.shedCount;
+            row.shedCountBaseSum = this.sumBelowFirst();
+          }
           break;
         case 3:
           row.average = number;
@@ -207,9 +212,105 @@ export struct MixCalcTable {
       }
     }
     row.updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+    this.recomputeFirstRow();
     this.draw();
   }
 
+  private showHelp(): void {
+    AlertDialog.show({
+      title: '使用帮助',
+      message: '1. 第一行填总棚号（如 1-40），后面各行填细分棚号，第一行棚数会自动扣减。\n2. 点单元格修改数值，确定后自动计算平均、水、称料。\n3. 长按较大料格可设置换料比例（后续版本）。',
+      confirm: {
+        value: '知道了',
+        action: () => {
+        }
+      }
+    });
+  }
+
+  private confirmReset(): void {
+    AlertDialog.show({
+      title: '重置数据',
+      message: '将清空当前批次的所有行，确定继续？',
+      primaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      },
+      secondaryButton: {
+        value: '确定',
+        action: () => {
+          this.resetAll();
+        }
+      }
+    });
+  }
+
+  private resetAll(): void {
+    for (let i = 0; i < this.rows.length; i++) {
+      let r: FeedData = this.rows[i];
+      r.shedNumber = '';
+      r.shedCount = 0;
+      r.average = 0;
+      r.fermented = 0;
+      r.powder = 0;
+      r.feed03 = 0;
+      r.feed05 = 0;
+      r.feed10 = 0;
+      r.water = 0;
+      r.weighed = 0;
+      r.shedCountBase = 0;
+      r.shedCountBaseSum = 0;
+      r.isShedCountManuallyModified = false;
+      r.isAverageManuallyModified = false;
+    }
+    this.recomputeFirstRow();
+    this.draw();
+  }
+  private sumBelowFirst(): number {
+    let sum: number = 0;
+    for (let i = 1; i < this.rows.length; i++) {
+      sum += this.rows[i].shedCount;
+    }
+    return sum;
+  }
+
+  /** 第一行是总棚数：自动扣掉后面各行已用的棚数。 */
+  private recomputeFirstRow(): void {
+    if (this.rows.length < 2) {
+      return;
+    }
+    let first: FeedData = this.rows[0];
+    let oldCount: number = first.shedCount;
+    let oldAverage: number = first.average;
+
+    if (!first.isShedCountManuallyModified) {
+      first.calculateShedCount();
+      first.shedCountBase = first.shedCount;
+      first.shedCountBaseSum = 0;
+    } else if (first.shedCountBase <= 0) {
+      if (first.shedCount > 0) {
+        first.shedCountBase = first.shedCount;
+        first.shedCountBaseSum = 0;
+      } else {
+        first.isShedCountManuallyModified = false;
+        first.calculateShedCount();
+        first.shedCountBase = first.shedCount;
+        first.shedCountBaseSum = 0;
+      }
+    }
+
+    let sum: number = this.sumBelowFirst();
+    let remainder: number = first.shedCountBase - (sum - first.shedCountBaseSum);
+    first.shedCount = remainder;
+
+    // 棚数变了就钉住每棚平均，避免平均被重新除出来
+    if (remainder !== oldCount && oldAverage > 0 && !first.isAverageManuallyModified) {
+      first.average = oldAverage;
+      first.isAverageManuallyModified = true;
+    }
+    first.recalculateDerivedOnly(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+  }
   private openEditor(row: number, column: number): void {
     if (!this.isEditableColumn(column)) {
       return;
@@ -535,6 +636,13 @@ export struct MixCalcTable {
     this.drawBody();
     this.drawHeader();
     this.drawFooter();
+  }
+
+  aboutToAppear(): void {
+    for (let i = 0; i < this.rows.length; i++) {
+      this.rows[i].updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+    }
+    this.recomputeFirstRow();
   }
 
   build() {

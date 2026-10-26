@@ -7,7 +7,7 @@ struct Index {
   private rows: FeedData[] = [];
 
   aboutToAppear(): void {
-    let demo: string[] = ['1-5', '6-8', '9-12', '13-15', '16-20'];
+    let demo: string[] = ['1-40', '1-3', '4-7', '8-13', '14-20'];
     for (let i = 0; i < 30; i++) {
       let row: FeedData = new FeedData();
       if (i < demo.length) {
