@@ -1,0 +1,8 @@
+/build
+/entry/build
+/.hvigor
+/.idea
+*.log
+local.properties
+node_modules/
+oh_modules/

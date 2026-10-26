@@ -1,0 +1,50 @@
+{
+  app: {
+    signingConfigs: [
+      {
+        name: 'default',
+        type: 'HarmonyOS',
+        material: {
+          certpath: 'C:\\Users\\Administrator\\.ohos\\config\\default_mixcalc-harmony_NCQPT5aTI8h8i4CTPLBtZg8o2Z2wT5XjsmQlf3nXnQ=.cer',
+          keyAlias: 'debugKey',
+          keyPassword: '0000001b49f3d70dd63beb6e0036ec7d81a6089752ca5b9dafc9d1e1c0a7362d6036639b0308787bc96523',
+          profile: 'C:\\Users\\Administrator\\.ohos\\config\\default_mixcalc-harmony_NCQPT5aTI8h8i4CTPLBtZg8o2Z2wT5XjsmQlf3nXnQ=.p7b',
+          signAlg: 'SHA256withECDSA',
+          storeFile: 'C:\\Users\\Administrator\\.ohos\\config\\default_mixcalc-harmony_NCQPT5aTI8h8i4CTPLBtZg8o2Z2wT5XjsmQlf3nXnQ=.p12',
+          storePassword: '0000001b49f3d70dd63beb6e0036ec7d81a6089752ca5b9dafc9d1e1c0a7362d6036639b0308787bc96523',
+        },
+      },
+    ],
+    products: [
+      {
+        name: 'default',
+        compatibleSdkVersion: '6.0.1(21)',
+        targetSdkVersion: '6.0.1(21)',
+        runtimeOS: 'HarmonyOS',
+        signingConfig: 'default',
+      },
+    ],
+    buildModeSet: [
+      {
+        name: 'debug',
+      },
+      {
+        name: 'release',
+      },
+    ],
+  },
+  modules: [
+    {
+      name: 'entry',
+      srcPath: './entry',
+      targets: [
+        {
+          name: 'default',
+          applyToProducts: [
+            'default',
+          ],
+        },
+      ],
+    },
+  ],
+}

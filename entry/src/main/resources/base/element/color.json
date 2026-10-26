@@ -1,0 +1,8 @@
+{
+  "color": [
+    { "name": "start_window_background", "value": "#FFFFFF" },
+    { "name": "status_bar_bg", "value": "#1F6B30" },
+    { "name": "title_bar_bg", "value": "#2D8C42" },
+    { "name": "page_bg", "value": "#F5F5F5" }
+  ]
+}
