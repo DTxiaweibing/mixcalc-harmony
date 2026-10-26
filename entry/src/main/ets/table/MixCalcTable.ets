@@ -244,13 +244,20 @@ export struct MixCalcTable {
   }
 
   private footerColor(c: number): string {
+    if (c === 1 || c === 10) {
+      return '#FFFFFF';
+    }
+    return this.footText;
+  }
+
+  private footerCellBg(c: number): string {
     if (c === 1) {
-      return '#0000FF';
+      return '#000042';
     }
     if (c === 10) {
       return '#960018';
     }
-    return this.footText;
+    return this.footBg;
   }
   private drawFooter(): void {
     let y: number = this.heightVp - this.metrics.footH;
@@ -271,7 +278,7 @@ export struct MixCalcTable {
     for (let c = 1; c < this.metrics.widths.length; c++) {
       let cx: number = x - this.offsetX;
       let w: number = this.metrics.widths[c];
-      this.ctx.fillStyle = this.footBg;
+      this.ctx.fillStyle = this.footerCellBg(c);
       this.ctx.fillRect(cx, y, w, this.metrics.footH);
       this.drawCell(cx, y, w, this.metrics.footH, this.footerText(c), this.footerColor(c));
       x += w;
