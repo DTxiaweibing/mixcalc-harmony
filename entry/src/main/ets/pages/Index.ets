@@ -31,10 +31,14 @@ struct Index {
   @State menuOpen: boolean = false;
   @State batchMenuOpen: boolean = false;
   @State menuWidth: number = 140;
+  @State screenW: number = 360;
+  @State settingsOpen: boolean = false;
+  @State draftVisible: boolean[] = [];
+  @State draftFixed: boolean[] = [];
 
   private menuItems: MenuItem[] = [
     new MenuItem('快捷设置', () => {
-      this.toast('快捷设置：下一步接入列显示与冻结');
+      this.openSettings();
     }),
     new MenuItem('批次切换', () => {
       this.batchMenuOpen = !this.batchMenuOpen;
@@ -72,6 +76,7 @@ struct Index {
       const info = display.getDefaultDisplaySync();
       const widthVp = this.getUIContext().px2vp(info.width);
       this.menuWidth = Math.max(140, widthVp / 3);
+      this.screenW = widthVp;
     } catch (e) {
       this.menuWidth = 140;
     }
@@ -101,6 +106,93 @@ struct Index {
       this.ready = true;
     }, 50);
     this.saveAll();
+  }
+
+  private settingsColumns(): number[] {
+    const result: number[] = [];
+    for (let i = 1; i < COLUMN_IDS.length; i++) {
+      result.push(i);
+    }
+    return result;
+  }
+
+  @Builder
+  settingCell(label: string, selected: boolean, action: () => void) {
+    Text(label)
+      .layoutWeight(1)
+      .height(28)
+      .fontSize(12)
+      .fontColor(selected ? Color.White : '#333333')
+      .textAlign(TextAlign.Center)
+      .backgroundColor(selected ? '#2D8C42' : '#FFFFFF')
+      .border({ width: 0.5, color: '#CCCCCC' })
+      .onClick(action)
+  }
+
+  private openSettings(): void {
+    const batch: Batch = this.currentBatch();
+    const vis: boolean[] = [];
+    const fix: boolean[] = [];
+    for (let i = 0; i < COLUMN_IDS.length; i++) {
+      vis.push(i === 0 ? true : batch.columnVisibility[COLUMN_IDS[i]] !== false);
+      fix.push(i === 0 ? true : batch.columnFixed[COLUMN_IDS[i]] === true);
+    }
+    this.draftVisible = vis;
+    this.draftFixed = fix;
+    // 等这一帧的点击结束再显示，避免新出现的遮罩把当次点击吃掉
+    setTimeout(() => {
+      this.settingsOpen = true;
+    }, 60);
+  }
+
+  private closeSettings(): void {
+    this.settingsOpen = false;
+  }
+
+  private confirmSettings(): void {
+    const batch: Batch = this.currentBatch();
+    for (let i = 1; i < COLUMN_IDS.length; i++) {
+      batch.columnVisibility[COLUMN_IDS[i]] = this.draftVisible[i];
+      batch.columnFixed[COLUMN_IDS[i]] = this.draftFixed[i];
+    }
+    this.settingsOpen = false;
+    this.saveAll();
+    this.rebuildTable();
+    this.toast('列设置已保存');
+  }
+
+  private toggleDraft(index: number, fixed: boolean): void {
+    const fix: boolean[] = [];
+    for (let i = 0; i < this.draftFixed.length; i++) {
+      fix.push(this.draftFixed[i]);
+    }
+    fix[index] = fixed;
+    this.draftFixed = fix;
+  }
+
+  private toggleDraftVisible(index: number, visible: boolean): void {
+    const vis: boolean[] = [];
+    for (let i = 0; i < this.draftVisible.length; i++) {
+      vis.push(this.draftVisible[i]);
+    }
+    vis[index] = visible;
+    this.draftVisible = vis;
+  }
+
+  private draftUnfixAll(): void {
+    const fix: boolean[] = [];
+    for (let i = 0; i < this.draftFixed.length; i++) {
+      fix.push(i === 0);
+    }
+    this.draftFixed = fix;
+  }
+
+  private draftShowAll(): void {
+    const vis: boolean[] = [];
+    for (let i = 0; i < this.draftVisible.length; i++) {
+      vis.push(true);
+    }
+    this.draftVisible = vis;
   }
 
   private visibleMask(): boolean[] {
@@ -324,6 +416,113 @@ struct Index {
           .position({ x: this.menuWidth, y: 80 })
         }
       }
+
+      if (this.settingsOpen) {
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor('#00000000')
+            .onClick(() => {
+              this.closeSettings();
+            })
+
+          Column() {
+            Row() {
+              Text('列名').layoutWeight(1).fontSize(13).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+              Text('固列').layoutWeight(1).fontSize(13).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+              Text('解固').layoutWeight(1).fontSize(13).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+              Text('隐列').layoutWeight(1).fontSize(13).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+              Text('显列').layoutWeight(1).fontSize(13).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+            }
+            .width('100%')
+            .height(40)
+            .backgroundColor('#E8F5E9')
+
+            ForEach(this.settingsColumns(), (col: number) => {
+              Row() {
+                Text(COLUMN_HEADS[col])
+                  .layoutWeight(1)
+                  .fontSize(13)
+                  .fontColor('#333333')
+                  .textAlign(TextAlign.Center)
+                this.settingCell('固列', this.draftFixed[col], () => {
+                  this.toggleDraft(col, true);
+                })
+                this.settingCell('解固', !this.draftFixed[col], () => {
+                  this.toggleDraft(col, false);
+                })
+                this.settingCell('隐列', !this.draftVisible[col], () => {
+                  this.toggleDraftVisible(col, false);
+                })
+                this.settingCell('显列', this.draftVisible[col], () => {
+                  this.toggleDraftVisible(col, true);
+                })
+              }
+              .width('100%')
+              .height(36)
+            }, (col: number) => 'set' + col.toString())
+
+            Divider().strokeWidth(1).color('#E0E0E0')
+
+            Row() {
+              Text('全取消')
+                .layoutWeight(1)
+                .height(32)
+                .fontSize(12)
+                .fontColor(Color.White)
+                .textAlign(TextAlign.Center)
+                .backgroundColor('#999999')
+                .borderRadius(4)
+                .onClick(() => {
+                  this.closeSettings();
+                })
+              Text('全解固')
+                .layoutWeight(1)
+                .height(32)
+                .fontSize(12)
+                .fontColor(Color.White)
+                .textAlign(TextAlign.Center)
+                .backgroundColor('#2D8C42')
+                .borderRadius(4)
+                .margin({ left: 6 })
+                .onClick(() => {
+                  this.draftUnfixAll();
+                })
+              Text('列全显')
+                .layoutWeight(1)
+                .height(32)
+                .fontSize(12)
+                .fontColor(Color.White)
+                .textAlign(TextAlign.Center)
+                .backgroundColor('#2D8C42')
+                .borderRadius(4)
+                .margin({ left: 6 })
+                .onClick(() => {
+                  this.draftShowAll();
+                })
+              Text('全确认')
+                .layoutWeight(1)
+                .height(32)
+                .fontSize(12)
+                .fontColor(Color.White)
+                .textAlign(TextAlign.Center)
+                .backgroundColor('#2D8C42')
+                .borderRadius(4)
+                .margin({ left: 6 })
+                .onClick(() => {
+                  this.confirmSettings();
+                })
+            }
+            .width('100%')
+            .height(44)
+            .padding({ left: 8, right: 8 })
+          }
+          .width(Math.min(360, this.screenW))
+          .backgroundColor(Color.White)
+          .shadow({ radius: 8, color: '#40000000', offsetX: 0, offsetY: 2 })
+          .position({ x: 0, y: 40 })
+        }
+
     }
     .width('100%')
     .height('100%')

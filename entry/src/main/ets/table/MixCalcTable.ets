@@ -473,19 +473,25 @@ export struct MixCalcTable {
     return false;
   }
 
-  private cellFillColor(data: FeedData, column: number): string {
-    if (column === 3 && !data.canEditAverage()) {
-      return '#F0F0F0';
+  /** 第一行棚数被后续行扣成 ≤0 时用警告色（安卓 STATE_WARNING）。 */
+  private isWarningCell(data: FeedData, column: number, rowIndex: number): boolean {
+    return column === 2 && rowIndex === 0 && data.shedCountBase > 0 && data.shedCount <= 0;
+  }
+
+  private cellFillColor(data: FeedData, column: number, rowIndex: number): string {
+    if (this.isWarningCell(data, column, rowIndex)) {
+      return '#FFC64B';
     }
+    // 平均列永不置灰（与安卓一致），只有料格按棚数禁用
     if (column >= 4 && column <= 8 && data.shedCount <= 0) {
       return '#F0F0F0';
     }
     return '#FFFFFF';
   }
 
-  private cellStrokeColor(data: FeedData, column: number): string {
-    if (column === 3 && !data.canEditAverage()) {
-      return '#CCCCCC';
+  private cellStrokeColor(data: FeedData, column: number, rowIndex: number): string {
+    if (this.isWarningCell(data, column, rowIndex)) {
+      return '#FF0000';
     }
     if (column >= 4 && column <= 8 && data.shedCount <= 0) {
       return '#CCCCCC';
@@ -767,9 +773,9 @@ export struct MixCalcTable {
       let cx: number = frozenW - this.offsetX;
       for (let i = 0; i < normal.length; i++) {
         const col: number = normal[i];
-        this.ctx.fillStyle = this.cellFillColor(row, col);
+        this.ctx.fillStyle = this.cellFillColor(row, col, r);
         this.ctx.fillRect(cx, y, WIDTHS[col], ROW_H);
-        this.ctx.strokeStyle = this.cellStrokeColor(row, col);
+        this.ctx.strokeStyle = this.cellStrokeColor(row, col, r);
         this.ctx.lineWidth = 0.5;
         this.ctx.strokeRect(cx, y, WIDTHS[col], ROW_H);
         const text: string = col === 0 ? (r + 1).toString() : this.cellText(row, col);
@@ -787,9 +793,9 @@ export struct MixCalcTable {
       let fx: number = 0;
       for (let i = 0; i < fixed.length; i++) {
         const col: number = fixed[i];
-        this.ctx.fillStyle = this.cellFillColor(row, col);
+        this.ctx.fillStyle = this.cellFillColor(row, col, r);
         this.ctx.fillRect(fx, y, WIDTHS[col], ROW_H);
-        this.ctx.strokeStyle = this.cellStrokeColor(row, col);
+        this.ctx.strokeStyle = this.cellStrokeColor(row, col, r);
         this.ctx.lineWidth = 0.5;
         this.ctx.strokeRect(fx, y, WIDTHS[col], ROW_H);
         const text: string = col === 0 ? (r + 1).toString() : this.cellText(row, col);
