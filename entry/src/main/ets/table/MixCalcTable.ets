@@ -128,8 +128,7 @@ export struct MixCalcTable {
 
   private maxOffsetY(): number {
     let bodyH: number = this.rows.length * ROW_H;
-    let visible: number = this.viewH - HEAD_H - FOOT_H;
-    return Math.max(0, bodyH - visible);
+    return Math.max(0, bodyH - this.viewH);
   }
 
   private clampOffsets(): void {
@@ -596,6 +595,8 @@ export struct MixCalcTable {
         Text(HEADS[0])
           .width(FROZEN_W)
           .height(HEAD_H)
+          .backgroundColor('#E8F5E9')
+          .zIndex(1)
           .fontSize(12)
           .fontWeight(FontWeight.Bold)
           .fontColor('#000000')
@@ -668,6 +669,7 @@ export struct MixCalcTable {
         Text(this.footerText(0))
           .width(FROZEN_W)
           .height(FOOT_H)
+          .zIndex(1)
           .fontSize(12)
           .fontWeight(FontWeight.Bold)
           .fontColor('#1F6B30')
