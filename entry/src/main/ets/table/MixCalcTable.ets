@@ -65,6 +65,84 @@ struct CellEditorDialog {
   }
 }
 
+@CustomDialog
+struct ConfirmDialog {
+  controller?: CustomDialogController;
+  title: string = '';
+  message: string = '';
+  confirmText: string = '确定重置';
+  confirmColor: string = '#D32F2F';
+  onConfirm: () => void = () => {};
+
+  build() {
+    Column() {
+      Text(this.title)
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#000000')
+        .width('100%')
+        .textAlign(TextAlign.Center)
+        .padding({ top: 16, bottom: 12, left: 16, right: 16 })
+
+      Divider()
+        .strokeWidth(1)
+        .color('#E0E0E0')
+
+      Text(this.message)
+        .fontSize(15)
+        .fontColor('#333333')
+        .textAlign(TextAlign.Center)
+        .lineHeight(23)
+        .padding({ top: 20, bottom: 20, left: 20, right: 20 })
+
+      Divider()
+        .strokeWidth(1)
+        .color('#E0E0E0')
+
+      Row() {
+        Button('取消')
+          .type(ButtonType.Normal)
+          .layoutWeight(1)
+          .height(48)
+          .borderRadius(0)
+          .backgroundColor(Color.Transparent)
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#666666')
+          .onClick(() => {
+            this.controller?.close();
+          })
+
+        Divider()
+          .vertical(true)
+          .height(48)
+          .strokeWidth(1)
+          .color('#E0E0E0')
+
+        Button(this.confirmText)
+          .type(ButtonType.Normal)
+          .layoutWeight(1)
+          .height(48)
+          .borderRadius(0)
+          .backgroundColor(Color.Transparent)
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.confirmColor)
+          .onClick(() => {
+            this.controller?.close();
+            this.onConfirm();
+          })
+      }
+      .width('100%')
+      .height(48)
+    }
+    .width('70%')
+    .backgroundColor(Color.White)
+    .borderRadius(12)
+    .clip(true)
+  }
+}
+
 @Component
 export struct MixCalcTable {
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
@@ -73,6 +151,22 @@ export struct MixCalcTable {
   rows: FeedData[] = [];
   onChanged: () => void = () => {};
   onHelp: () => void = () => {};
+
+  private resetTitle: string = '确认重置';
+  private resetMessage: string = '';
+  private resetController: CustomDialogController = new CustomDialogController({
+    builder: ConfirmDialog({
+      title: this.resetTitle,
+      message: this.resetMessage,
+      confirmText: '确定重置',
+      confirmColor: '#D32F2F',
+      onConfirm: () => {
+        this.resetAll();
+      }
+    }),
+    autoCancel: true,
+    customStyle: true
+  });
 
   @State offsetX: number = 0;
   @State offsetY: number = 0;
@@ -440,26 +534,10 @@ export struct MixCalcTable {
 
   private confirmReset(): void {
     let filled: number = this.filledRows();
-    let message: string = filled > 0
+    this.resetMessage = filled > 0
       ? '确定要重置所有数据吗？\n\n当前已有 ' + filled.toString() + ' 行数据，重置后将全部清空。'
       : '确定要重置所有数据吗？\n\n当前没有数据需要重置。';
-    AlertDialog.show({
-      title: '确认重置',
-      message: message,
-      primaryButton: {
-        value: '取消',
-        fontColor: '#666666',
-        action: () => {
-        }
-      },
-      secondaryButton: {
-        value: '确定重置',
-        fontColor: '#D32F2F',
-        action: () => {
-          this.resetAll();
-        }
-      }
-    });
+    this.resetController.open();
   }
 
   private resetAll(): void {
