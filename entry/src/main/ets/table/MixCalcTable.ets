@@ -348,7 +348,7 @@ export struct MixCalcTable {
     }
     const normal: number[] = this.normalIndices();
     for (let i = 0; i < normal.length; i++) {
-      const cx: number = this.frozenWidth() + acc - this.offsetX;
+      const cx: number = acc - this.offsetX;
       if (x >= cx && x < cx + WIDTHS[normal[i]]) {
         return normal[i];
       }
@@ -929,26 +929,6 @@ export struct MixCalcTable {
           this.viewH = Number(newValue.height);
           this.drawBody();
         })
-        .gesture(
-          PanGesture()
-            .onActionStart(() => {
-              this.stopFling();
-              this.lastPanX = 0;
-              this.lastPanY = 0;
-            })
-            .onActionUpdate((event: GestureEvent) => {
-              const dx: number = event.offsetX - this.lastPanX;
-              const dy: number = event.offsetY - this.lastPanY;
-              this.lastPanX = event.offsetX;
-              this.lastPanY = event.offsetY;
-              this.offsetX -= dx;
-              this.offsetY -= dy;
-              this.drawBody();
-            })
-            .onActionEnd((event: GestureEvent) => {
-              this.startFling(event.velocityX, event.velocityY);
-            })
-        )
         .onClick((event: ClickEvent) => {
           const row: number = Math.floor((event.y + this.offsetY) / ROW_H);
           if (row < 0 || row >= this.rows.length) {
@@ -1055,5 +1035,25 @@ export struct MixCalcTable {
     }
     .width('100%')
     .height('100%')
+    .gesture(
+      PanGesture()
+        .onActionStart(() => {
+          this.stopFling();
+          this.lastPanX = 0;
+          this.lastPanY = 0;
+        })
+        .onActionUpdate((event: GestureEvent) => {
+          const dx: number = event.offsetX - this.lastPanX;
+          const dy: number = event.offsetY - this.lastPanY;
+          this.lastPanX = event.offsetX;
+          this.lastPanY = event.offsetY;
+          this.offsetX -= dx;
+          this.offsetY -= dy;
+          this.drawBody();
+        })
+        .onActionEnd((event: GestureEvent) => {
+          this.startFling(event.velocityX, event.velocityY);
+        })
+    )
   }
 }

@@ -31,6 +31,7 @@ struct Index {
   private batches: Batch[] = [];
   @State activeBatch: number = 0;
   @State ready: boolean = false;
+  @State tableGen: number = 0;
   @State menuOpen: boolean = false;
   @State batchMenuOpen: boolean = false;
   @State menuWidth: number = 140;
@@ -124,10 +125,8 @@ struct Index {
     }
     this.saveAll();
     this.activeBatch = index;
-    this.ready = false;
-    setTimeout(() => {
-    }, 50);
     this.saveAll();
+    this.rebuildTable();
   }
 
   private settingsColumns(): number[] {
@@ -225,10 +224,7 @@ struct Index {
   }
 
   private rebuildTable(): void {
-    this.ready = false;
-    setTimeout(() => {
-      this.ready = true;
-    }, 50);
+    this.tableGen = this.tableGen + 1;
   }
 
   private handleColumnAction(action: string, index: number): void {
