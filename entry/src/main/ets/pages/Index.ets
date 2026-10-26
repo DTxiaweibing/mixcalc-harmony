@@ -2,72 +2,52 @@ import { MixCalcTable } from '../table/MixCalcTable';
 import { FeedData } from '../model/FeedData';
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
-import { promptAction } from '@kit.ArkUI';
+import { promptAction, router } from '@kit.ArkUI';
 
 const PREF_NAME: string = 'MixCalcPrefs';
 const KEY_DATA: string = 'saved_data';
 const ROW_COUNT: number = 30;
 
-const HELP_TEXT: string = '一、填表\n' +
-  '1. 第一行填总棚号（如 1-40），棚数自动算出。\n' +
-  '2. 第二行起填细分棚号（如 1-5、6-8），第一行棚数会自动扣减后续各行之和。\n' +
-  '3. 棚号清空 → 该行数据全部清零；棚号保留、棚数改 0 → 只清料，保留棚号。\n\n' +
-  '二、计算\n' +
-  '平均 =（粉料 + 0.3料 + 0.5料 + 1.0料[ + 发酵料]）÷ 棚数\n' +
-  '水 =（同上合计）× 水比\n' +
-  '称料 =（料合计 + 水 + 发酵料）÷ 棚数\n\n' +
-  '三、编辑\n' +
-  '点单元格弹出输入框，确定后自动重算；平均在料种不超过两种时可手改，改后按棚数反推料量。\n\n' +
-  '四、表尾\n' +
-  '左侧显示已填行数/总行数；「帮助」看本说明；「重置」清空当前表（需二次确认）。';
+class MenuItem {
+  label: string;
+  action: () => void;
 
-@CustomDialog
-struct HelpDialog {
-  controller?: CustomDialogController;
-
-  build() {
-    Column() {
-      Text('使用帮助')
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .margin({ top: 16, bottom: 8 })
-
-      Scroll() {
-        Text(HELP_TEXT)
-          .fontSize(14)
-          .lineHeight(23)
-          .padding({ left: 16, right: 16 })
-      }
-      .layoutWeight(1)
-      .align(Alignment.TopStart)
-
-      Button('关闭')
-        .width('86%')
-        .height(42)
-        .backgroundColor('#2D8C42')
-        .fontColor(Color.White)
-        .margin({ top: 12, bottom: 16 })
-        .onClick(() => {
-          this.controller?.close();
-        })
-    }
-    .width('88%')
-    .height('72%')
-    .backgroundColor(Color.White)
-    .borderRadius(12)
+  constructor(label: string, action: () => void) {
+    this.label = label;
+    this.action = action;
   }
 }
+
 @Entry
 @Component
 struct Index {
   private rows: FeedData[] = [];
   @State ready: boolean = false;
+  @State menuOpen: boolean = false;
   private store: preferences.Preferences | null = null;
-  private helpController: CustomDialogController = new CustomDialogController({
-    builder: HelpDialog(),
-    autoCancel: true,
-    customStyle: true
-  });
+
+  private menuItems: MenuItem[] = [
+    new MenuItem('快捷设置', () => {
+      this.toast('快捷设置：下一步接入列显示与冻结');
+    }),
+    new MenuItem('批次切换', () => {
+      this.toast('批次 01 / 02 切换：下一步实现');
+    }),
+    new MenuItem('隐私政策', () => {
+      this.openPage('privacy.html', '隐私政策');
+    }),
+    new MenuItem('用户协议', () => {
+      this.openPage('user.html', '用户协议');
+    }),
+    new MenuItem('使用帮助', () => {
+      this.openPage('help/index.html', '使用帮助');
+    }),
+    new MenuItem('选择语言', () => {
+      this.toast('中英文切换：下一步实现');
+    }),
+    new MenuItem('版本:v1.0.0', () => {
+    })
+  ];
 
   async aboutToAppear(): Promise<void> {
     await this.loadRows();
@@ -121,93 +101,106 @@ struct Index {
     promptAction.showToast({ message: message, duration: 2000 });
   }
 
+  private openPage(route: string, title: string): void {
+    router.pushUrl({
+      url: 'pages/WebPage',
+      params: {
+        route: route,
+        title: title
+      }
+    });
+  }
+
   onPageHide(): void {
     this.saveRows();
   }
 
+  @Builder
+  menuRow(item: MenuItem, isLast: boolean) {
+    Text(item.label)
+      .width('100%')
+      .height(39)
+      .fontSize(18)
+      .fontColor(item.label.startsWith('版本') ? '#999999' : '#333333')
+      .textAlign(TextAlign.Center)
+      .onClick(() => {
+        this.menuOpen = false;
+        item.action();
+      })
+    if (!isLast) {
+      Divider()
+        .strokeWidth(1)
+        .color('#E0E0E0')
+    }
+  }
+
   build() {
-    Column() {
-      Row() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
         Row() {
           Text('☰')
             .fontSize(22)
             .fontColor(Color.White)
-            .padding({ left: 4, right: 12, top: 4, bottom: 4 })
-            .bindMenu([
-              {
-                value: '快捷设置',
-                action: () => {
-                  this.toast('快捷设置：下一步接入列显示与冻结');
-                }
-              },
-              {
-                value: '批次切换',
-                action: () => {
-                  this.toast('批次 01 / 02 切换：下一步实现');
-                }
-              },
-              {
-                value: '隐私政策',
-                action: () => {
-                  this.toast('隐私政策：下一步接入');
-                }
-              },
-              {
-                value: '用户协议',
-                action: () => {
-                  this.toast('用户协议：下一步接入');
-                }
-              },
-              {
-                value: '使用帮助',
-                action: () => {
-                  this.helpController.open();
-                }
-              },
-              {
-                value: '选择语言',
-                action: () => {
-                  this.toast('中英文切换：下一步实现');
-                }
-              },
-              {
-                value: '版本:v1.0.0',
-                enabled: false,
-                action: () => {
-                }
-              }
-            ])
+            .width(44)
+            .height(40)
+            .textAlign(TextAlign.Center)
+            .onClick(() => {
+              this.menuOpen = !this.menuOpen;
+            })
+
+          Text($r('app.string.title_main'))
+            .fontSize(20)
+            .fontColor(Color.White)
+            .layoutWeight(1)
+            .textAlign(TextAlign.Center)
+
+          Text('')
+            .width(44)
         }
-        .width('20%')
-        .padding({ left: 10 })
-        .justifyContent(FlexAlign.Start)
+        .width('100%')
+        .height(40)
+        .backgroundColor($r('app.color.title_bar_bg'))
 
-        Text($r('app.string.title_main'))
-          .fontSize(20)
-          .fontColor(Color.White)
-          .width('60%')
-          .textAlign(TextAlign.Center)
-
-        Text('')
-          .fontSize(14)
-          .fontColor(Color.White)
-          .width('20%')
-          .textAlign(TextAlign.Center)
+        if (this.ready) {
+          MixCalcTable({
+            rows: this.rows,
+            onChanged: () => {
+              this.saveRows();
+            },
+            onHelp: () => {
+              this.openPage('help/index.html', '使用帮助');
+            }
+          })
+            .layoutWeight(1)
+            .width('100%')
+        }
       }
       .width('100%')
-      .height(40)
-      .backgroundColor($r('app.color.title_bar_bg'))
+      .height('100%')
+      .backgroundColor($r('app.color.page_bg'))
 
-      if (this.ready) {
-        MixCalcTable({ rows: this.rows, onChanged: () => {
-          this.saveRows();
-        } })
-          .layoutWeight(1)
+      if (this.menuOpen) {
+        Column()
           .width('100%')
+          .height('100%')
+          .backgroundColor('#00000000')
+          .onClick(() => {
+            this.menuOpen = false;
+          })
+
+        Column() {
+          ForEach(this.menuItems, (item: MenuItem, index: number) => {
+            this.menuRow(item, index === this.menuItems.length - 1)
+          }, (item: MenuItem) => item.label)
+        }
+        .width('33%')
+        .constraintSize({ minWidth: 140 })
+        .backgroundColor(Color.White)
+        .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
+        .position({ x: 0, y: 40 })
       }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.page_bg'))
   }
 }

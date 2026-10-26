@@ -72,6 +72,7 @@ export struct MixCalcTable {
 
   rows: FeedData[] = [];
   onChanged: () => void = () => {};
+  onHelp: () => void = () => {};
 
   @State offsetX: number = 0;
   @State offsetY: number = 0;
@@ -435,28 +436,26 @@ export struct MixCalcTable {
   }
 
   private showHelp(): void {
-    AlertDialog.show({
-      title: '使用帮助',
-      message: '1. 第一行填总棚号（如 1-40），后面各行填细分棚号，第一行棚数自动扣减后续行。\n2. 点单元格修改数值，确定后自动算平均、水、称料。\n3. 棚号清空整行清空；棚数改 0 只保留棚号。',
-      confirm: {
-        value: '知道了',
-        action: () => {
-        }
-      }
-    });
+    this.onHelp();
   }
 
   private confirmReset(): void {
+    let filled: number = this.filledRows();
+    let message: string = filled > 0
+      ? '确定要重置所有数据吗？\n\n当前已有 ' + filled.toString() + ' 行数据，重置后将全部清空。'
+      : '确定要重置所有数据吗？\n\n当前没有数据需要重置。';
     AlertDialog.show({
-      title: '重置数据',
-      message: '将清空当前表所有行，确定继续？',
+      title: '确认重置',
+      message: message,
       primaryButton: {
         value: '取消',
+        fontColor: '#666666',
         action: () => {
         }
       },
       secondaryButton: {
-        value: '确定',
+        value: '确定重置',
+        fontColor: '#D32F2F',
         action: () => {
           this.resetAll();
         }
