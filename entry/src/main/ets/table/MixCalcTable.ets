@@ -1,13 +1,11 @@
 import { FeedData } from '../model/FeedData';
 
-class Metrics {
-  rowH: number = 40;
-  headH: number = 40;
-  footH: number = 40;
-  widths: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
-  heads: string[] = ['序号', '棚号', '棚数', '平均', '发酵料', '粉料', '0.3料', '0.5料', '1.0料', '水', '称料'];
-}
-
+const WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
+const HEADS: string[] = ['序号', '棚号', '棚数', '平均', '发酵料', '粉料', '0.3料', '0.5料', '1.0料', '水', '称料'];
+const ROW_H: number = 40;
+const HEAD_H: number = 40;
+const FOOT_H: number = 40;
+const FROZEN_W: number = 40;
 
 @CustomDialog
 struct CellEditorDialog {
@@ -21,7 +19,6 @@ struct CellEditorDialog {
   aboutToAppear(): void {
     this.input = this.initValue;
   }
-
 
   build() {
     Column() {
@@ -67,46 +64,34 @@ struct CellEditorDialog {
     .borderRadius(12)
   }
 }
+
 @Component
 export struct MixCalcTable {
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
-  private metrics: Metrics = new Metrics();
 
   rows: FeedData[] = [];
   onChanged: () => void = () => {};
-  private offsetX: number = 0;
-  private offsetY: number = 0;
+
+  @State offsetX: number = 0;
+  @State offsetY: number = 0;
+  @State viewW: number = 0;
+  @State viewH: number = 0;
+
   private lastPanX: number = 0;
   private lastPanY: number = 0;
   private flingTimer: number = -1;
-  private widthVp: number = 0;
-  private heightVp: number = 0;
-  private frozenW: number = 40;
-
-  @State editing: boolean = false;
-  @State editText: string = '';
-  private editRow: number = -1;
-  private editCol: number = -1;
-  private editX: number = 0;
-  private editY: number = 0;
-  private editW: number = 0;
 
   waterPercentage: number = 20;
   fermentedInWater: boolean = false;
   fermentedInAverage: boolean = false;
 
-  private readonly headBg: string = '#E8F5E9';
-  private readonly footBg: string = '#EAF3EC';
-  private readonly gridColor: string = '#000000';
-  private readonly textBlack: string = '#000000';
-  private readonly textGray: string = '#666666';
-  private readonly textBlue: string = '#0000FF';
-  private readonly footText: string = '#1F6B30';
-
   editorTitle: string = '';
   editorValue: string = '';
   editorIsNumber: boolean = false;
+  private editRow: number = -1;
+  private editCol: number = -1;
+
   private editorController: CustomDialogController = new CustomDialogController({
     builder: CellEditorDialog({
       title: this.editorTitle,
@@ -119,285 +104,31 @@ export struct MixCalcTable {
     autoCancel: true,
     customStyle: true
   });
-  private isEditableColumn(column: number): boolean {
-    return column >= 1 && column <= 8;
-  }
 
-  private columnAt(x: number): number {
-    if (x < this.frozenW) {
-      return 0;
+  private totalWidth(): number {
+    let sum: number = 0;
+    for (let i = 0; i < WIDTHS.length; i++) {
+      sum += WIDTHS[i];
     }
-    for (let c = 1; c < this.metrics.widths.length; c++) {
-      let cx: number = this.xOfColumn(c) - this.offsetX;
-      if (x >= cx && x < cx + this.metrics.widths[c]) {
-        return c;
-      }
-    }
-    return -1;
+    return sum;
   }
 
   private xOfColumn(index: number): number {
     let x: number = 0;
     for (let i = 0; i < index; i++) {
-      x += this.metrics.widths[i];
+      x += WIDTHS[i];
     }
     return x;
   }
 
-  private columnTitle(column: number): string {
-    switch (column) {
-      case 1: return '棚号';
-      case 2: return '棚数';
-      case 3: return '平均';
-      case 4: return '发酵料';
-      case 5: return '粉料';
-      case 6: return '0.3料';
-      case 7: return '0.5料';
-      case 8: return '1.0料';
-      default: return '';
-    }
-  }
-
-  private currentValue(row: number, column: number): string {
-    let data: FeedData = this.rows[row];
-    if (column === 1) {
-      return data.shedNumber;
-    }
-    let value: number = 0;
-    switch (column) {
-      case 2: value = data.shedCount; break;
-      case 3: value = data.average; break;
-      case 4: value = data.fermented; break;
-      case 5: value = data.powder; break;
-      case 6: value = data.feed03; break;
-      case 7: value = data.feed05; break;
-      case 8: value = data.feed10; break;
-      default: break;
-    }
-    return value === 0 ? '' : value.toFixed(2);
-  }
-
-  private nfIndexOf(column: number): number {
-    switch (column) {
-      case 5: return 0;
-      case 6: return 1;
-      case 7: return 2;
-      case 8: return 3;
-      default: return -1;
-    }
-  }
-
-  private applyEdit(text: string): void {
-    if (this.editRow < 0 || this.editCol < 0) {
-      return;
-    }
-    let row: FeedData = this.rows[this.editRow];
-    let value: string = text.trim();
-    let col: number = this.editCol;
-    let number: number = value.length === 0 ? 0 : Number(value);
-    if (isNaN(number)) {
-      number = 0;
-    }
-
-    if (col === 1) {
-      row.setShedNumber(value);
-      if (value.length === 0) {
-        this.clearRowData(row, true);
-      }
-    } else if (col === 2) {
-      let newCount: number = Math.round(number);
-      row.shedCount = newCount;
-      row.isShedCountManuallyModified = !(newCount === 0 || value.length === 0);
-      if (this.editRow === 0) {
-        row.shedCountBase = newCount;
-        row.shedCountBaseSum = this.sumBelowFirst();
-      }
-    } else if (col === 3) {
-      row.setAverageManually(number, this.fermentedInAverage);
-    } else {
-      let nfIndex: number = this.nfIndexOf(col);
-      let origin: number = nfIndex >= 0 ? row.getNonFermentedValue(nfIndex) : 0;
-      row.isAverageManuallyModified = false;
-      if (number === 0 && nfIndex >= 0) {
-        row.mergeSmallerWhenCleared(nfIndex, origin);
-      }
-      switch (col) {
-        case 4: row.fermented = number; break;
-        case 5: row.powder = number; break;
-        case 6: row.feed03 = number; break;
-        case 7: row.feed05 = number; break;
-        case 8: row.feed10 = number; break;
-        default: break;
-      }
-      row.switchRatio = 0;
-    }
-
-    // 安卓 applyRowChange：第 2 行起，没有棚数就清空料格
-    if (this.editRow !== 0 && row.shedCount <= 0) {
-      row.fermented = 0;
-      row.powder = 0;
-      row.feed03 = 0;
-      row.feed05 = 0;
-      row.feed10 = 0;
-      row.water = 0;
-      row.weighed = 0;
-      row.average = 0;
-      row.isAverageManuallyModified = false;
-      row.switchRatio = 0;
-    }
-
-    if (this.editRow !== 0) {
-      row.updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
-    }
-    this.recomputeFirstRow();
-    this.draw();
-  }
-
-  /** 清空一行数据；keepShedNumber 为 true 时保留棚号。 */
-  private clearRowData(row: FeedData, clearShedNumber: boolean): void {
-    if (clearShedNumber) {
-      row.shedNumber = '';
-    }
-    row.shedCount = 0;
-    row.average = 0;
-    row.fermented = 0;
-    row.powder = 0;
-    row.feed03 = 0;
-    row.feed05 = 0;
-    row.feed10 = 0;
-    row.water = 0;
-    row.weighed = 0;
-    row.shedCountBase = 0;
-    row.shedCountBaseSum = 0;
-    row.isAverageManuallyModified = false;
-  }
-
-  private showHelp(): void {
-    AlertDialog.show({
-      title: '使用帮助',
-      message: '1. 第一行填总棚号（如 1-40），后面各行填细分棚号，第一行棚数会自动扣减。\n2. 点单元格修改数值，确定后自动计算平均、水、称料。\n3. 长按较大料格可设置换料比例（后续版本）。',
-      confirm: {
-        value: '知道了',
-        action: () => {
-        }
-      }
-    });
-  }
-
-  private confirmReset(): void {
-    AlertDialog.show({
-      title: '重置数据',
-      message: '将清空当前批次的所有行，确定继续？',
-      primaryButton: {
-        value: '取消',
-        action: () => {
-        }
-      },
-      secondaryButton: {
-        value: '确定',
-        action: () => {
-          this.resetAll();
-        }
-      }
-    });
-  }
-
-  private resetAll(): void {
-    for (let i = 0; i < this.rows.length; i++) {
-      let r: FeedData = this.rows[i];
-      r.shedNumber = '';
-      r.shedCount = 0;
-      r.average = 0;
-      r.fermented = 0;
-      r.powder = 0;
-      r.feed03 = 0;
-      r.feed05 = 0;
-      r.feed10 = 0;
-      r.water = 0;
-      r.weighed = 0;
-      r.shedCountBase = 0;
-      r.shedCountBaseSum = 0;
-      r.isShedCountManuallyModified = false;
-      r.isAverageManuallyModified = false;
-    }
-    this.recomputeFirstRow();
-    this.draw();
-  }
-  private sumBelowFirst(): number {
-    let sum: number = 0;
-    for (let i = 1; i < this.rows.length; i++) {
-      sum += this.rows[i].shedCount;
-    }
-    return sum;
-  }
-
-  /** 第一行是总棚数：自动扣掉后面各行已用的棚数。 */
-  private recomputeFirstRow(): void {
-    if (this.rows.length < 2) {
-      return;
-    }
-    let first: FeedData = this.rows[0];
-    let oldCount: number = first.shedCount;
-    let oldAverage: number = first.average;
-
-    if (!first.isShedCountManuallyModified) {
-      first.calculateShedCount();
-      first.shedCountBase = first.shedCount;
-      first.shedCountBaseSum = 0;
-    } else if (first.shedCountBase <= 0) {
-      if (first.shedCount > 0) {
-        first.shedCountBase = first.shedCount;
-        first.shedCountBaseSum = 0;
-      } else {
-        first.isShedCountManuallyModified = false;
-        first.calculateShedCount();
-        first.shedCountBase = first.shedCount;
-        first.shedCountBaseSum = 0;
-      }
-    }
-
-    let sum: number = this.sumBelowFirst();
-    let remainder: number = first.shedCountBase - (sum - first.shedCountBaseSum);
-    first.shedCount = remainder;
-
-    // 棚数变了就钉住每棚平均，避免平均被重新除出来
-    if (remainder !== oldCount && oldAverage > 0 && !first.isAverageManuallyModified) {
-      first.average = oldAverage;
-      first.isAverageManuallyModified = true;
-    }
-    first.recalculateDerivedOnly(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
-  }
-  private openEditor(row: number, column: number): void {
-    if (!this.isEditableColumn(column)) {
-      return;
-    }
-    this.stopFling();
-    this.editRow = row;
-    this.editCol = column;
-    this.editorTitle = this.columnTitle(column) + ' · 第' + (row + 1).toString() + '行';
-    this.editorValue = this.currentValue(row, column);
-    this.editorIsNumber = column !== 1;
-    this.editorController.open();
-  }
-  private totalWidth(): number {
-    let sum: number = 0;
-    for (let i = 0; i < this.metrics.widths.length; i++) {
-      sum += this.metrics.widths[i];
-    }
-    return sum;
-  }
-
-  private bodyHeight(): number {
-    return this.rows.length * this.metrics.rowH;
-  }
-
   private maxOffsetX(): number {
-    return Math.max(0, this.totalWidth() - this.widthVp);
+    return Math.max(0, this.totalWidth() - this.viewW);
   }
 
   private maxOffsetY(): number {
-    let visible: number = this.heightVp - this.metrics.headH - this.metrics.footH;
-    return Math.max(0, this.bodyHeight() - visible);
+    let bodyH: number = this.rows.length * ROW_H;
+    let visible: number = this.viewH - HEAD_H - FOOT_H;
+    return Math.max(0, bodyH - visible);
   }
 
   private clampOffsets(): void {
@@ -405,41 +136,11 @@ export struct MixCalcTable {
     this.offsetY = Math.min(Math.max(0, this.offsetY), this.maxOffsetY());
   }
 
-  private drawBox(x: number, y: number, w: number, h: number): void {
-    this.ctx.strokeStyle = this.gridColor;
-    this.ctx.lineWidth = 0.5;
-    this.ctx.strokeRect(x, y, w, h);
-  }
-
-  private drawText(x: number, y: number, w: number, h: number, text: string, color: string): void {
-    if (text.length === 0) {
-      return;
-    }
-    this.ctx.fillStyle = color;
-    this.ctx.font = 'bold 12vp sans-serif';
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
-    let measure: number = this.ctx.measureText(text).width;
-    let clipped: string = text;
-    while (measure > w - 4 && clipped.length > 1) {
-      clipped = clipped.substring(0, clipped.length - 1);
-      measure = this.ctx.measureText(clipped + '…').width;
-    }
-    if (clipped.length < text.length) {
-      clipped = clipped + '…';
-    }
-    this.ctx.fillText(clipped, x + w / 2, y + h / 2);
-  }
-
-  private drawCell(x: number, y: number, w: number, h: number, text: string, color: string): void {
-    this.drawBox(x, y, w, h);
-    this.drawText(x, y, w, h, text, color);
-  }
-
+  // ===== 数据派生 =====
   private cellText(row: FeedData, column: number): string {
     switch (column) {
       case 1: return row.shedNumber;
-      case 2: return row.shedCount > 0 ? row.shedCount.toString() : '';
+      case 2: return row.shedCount === 0 ? '' : Math.round(row.shedCount).toString();
       case 3: return row.average > 0 ? row.average.toFixed(2) : '';
       case 4: return row.fermented > 0 ? row.fermented.toFixed(2) : '';
       case 5: return row.powder > 0 ? row.powder.toFixed(2) : '';
@@ -454,93 +155,26 @@ export struct MixCalcTable {
 
   private cellColor(column: number): string {
     if (column === 0) {
-      return this.textGray;
+      return '#666666';
     }
     if (column === 3 || column === 9 || column === 10) {
-      return this.textBlue;
+      return '#0000FF';
     }
-    return this.textBlack;
-  }
-
-  private drawHeader(): void {
-    this.ctx.fillStyle = this.headBg;
-    this.ctx.fillRect(0, 0, this.widthVp, this.metrics.headH);
-
-    let x: number = 0;
-    for (let c = 0; c < this.metrics.heads.length; c++) {
-      let cx: number = x - (c === 0 ? 0 : this.offsetX);
-      let w: number = this.metrics.widths[c];
-      if (c > 0 && cx + w <= this.frozenW) {
-        x += w;
-        continue;
-      }
-      if (c > 0) {
-        this.ctx.save();
-        this.ctx.beginPath();
-        this.ctx.rect(this.frozenW, 0, this.widthVp - this.frozenW, this.metrics.headH);
-        this.ctx.clip();
-        this.drawCell(cx, 0, w, this.metrics.headH, this.metrics.heads[c], this.textBlack);
-        this.ctx.restore();
-      } else {
-        this.drawCell(0, 0, w, this.metrics.headH, this.metrics.heads[0], this.textBlack);
-      }
-      x += w;
-    }
-  }
-
-  private drawBody(): void {
-    let top: number = this.metrics.headH;
-    let bottom: number = this.heightVp - this.metrics.footH;
-
-    for (let r = 0; r < this.rows.length; r++) {
-      let y: number = top + r * this.metrics.rowH - this.offsetY;
-      if (y + this.metrics.rowH < top || y > bottom) {
-        continue;
-      }
-      let row: FeedData = this.rows[r];
-
-      this.ctx.save();
-      this.ctx.beginPath();
-      this.ctx.rect(0, top, this.widthVp, bottom - top);
-      this.ctx.clip();
-
-      let x: number = 0;
-      for (let c = 0; c < this.metrics.widths.length; c++) {
-        let cx: number = x - (c === 0 ? 0 : this.offsetX);
-        let w: number = this.metrics.widths[c];
-        if (c === 0) {
-          this.ctx.fillStyle = '#FFFFFF';
-          this.ctx.fillRect(0, y, w, this.metrics.rowH);
-          this.drawCell(0, y, w, this.metrics.rowH, (r + 1).toString(), this.textGray);
-        } else if (cx + w > this.frozenW) {
-          this.ctx.save();
-          this.ctx.beginPath();
-          this.ctx.rect(this.frozenW, top, this.widthVp - this.frozenW, bottom - top);
-          this.ctx.clip();
-          this.ctx.fillStyle = '#FFFFFF';
-          this.ctx.fillRect(Math.max(cx, this.frozenW), y, w, this.metrics.rowH);
-          this.drawCell(cx, y, w, this.metrics.rowH, this.cellText(row, c), this.cellColor(c));
-          this.ctx.restore();
-        }
-        x += w;
-      }
-      this.ctx.restore();
-    }
+    return '#000000';
   }
 
   private sumColumn(column: number): number {
     let s: number = 0;
     for (let i = 0; i < this.rows.length; i++) {
-      let row: FeedData = this.rows[i];
+      let r: FeedData = this.rows[i];
       switch (column) {
-        case 2: s += row.shedCount; break;
-        case 4: s += row.fermented; break;
-        case 5: s += row.powder; break;
-        case 6: s += row.feed03; break;
-        case 7: s += row.feed05; break;
-        case 8: s += row.feed10; break;
-        case 9: s += row.water; break;
-        case 10: s += row.weighed; break;
+        case 2: s += r.shedCount; break;
+        case 4: s += r.fermented; break;
+        case 5: s += r.powder; break;
+        case 6: s += r.feed03; break;
+        case 7: s += r.feed05; break;
+        case 8: s += r.feed10; break;
+        case 9: s += r.water; break;
         default: break;
       }
     }
@@ -590,13 +224,6 @@ export struct MixCalcTable {
     }
   }
 
-  private footerColor(c: number): string {
-    if (c === 1 || c === 10) {
-      return '#FFFFFF';
-    }
-    return this.footText;
-  }
-
   private footerCellBg(c: number): string {
     if (c === 1) {
       return '#000042';
@@ -604,33 +231,308 @@ export struct MixCalcTable {
     if (c === 10) {
       return '#960018';
     }
-    return this.footBg;
+    return '#EAF3EC';
   }
-  private drawFooter(): void {
-    let y: number = this.heightVp - this.metrics.footH;
-    this.ctx.fillStyle = this.footBg;
-    this.ctx.fillRect(0, y, this.widthVp, this.metrics.footH);
 
-    // 首列（已填行数/总行数）不参与横向偏移
-    this.ctx.fillStyle = this.footBg;
-    this.ctx.fillRect(0, y, this.frozenW, this.metrics.footH);
-    this.drawCell(0, y, this.frozenW, this.metrics.footH, this.footerText(0), this.footerColor(0));
-
-    this.ctx.save();
-    this.ctx.beginPath();
-    this.ctx.rect(this.frozenW, y, Math.max(0, this.widthVp - this.frozenW), this.metrics.footH);
-    this.ctx.clip();
-
-    let x: number = this.frozenW;
-    for (let c = 1; c < this.metrics.widths.length; c++) {
-      let cx: number = x - this.offsetX;
-      let w: number = this.metrics.widths[c];
-      this.ctx.fillStyle = this.footerCellBg(c);
-      this.ctx.fillRect(cx, y, w, this.metrics.footH);
-      this.drawCell(cx, y, w, this.metrics.footH, this.footerText(c), this.footerColor(c));
-      x += w;
+  private footerColor(c: number): string {
+    if (c === 1 || c === 10) {
+      return '#FFFFFF';
     }
-    this.ctx.restore();
+    return '#1F6B30';
+  }
+
+  private isEditableColumn(column: number): boolean {
+    return column >= 1 && column <= 8;
+  }
+
+  private columnAt(x: number): number {
+    if (x < FROZEN_W) {
+      return 0;
+    }
+    for (let c = 1; c < WIDTHS.length; c++) {
+      let cx: number = this.xOfColumn(c) - this.offsetX;
+      if (x >= cx && x < cx + WIDTHS[c]) {
+        return c;
+      }
+    }
+    return -1;
+  }
+
+  private columnTitle(column: number): string {
+    return column >= 0 && column < HEADS.length ? HEADS[column] : '';
+  }
+
+  private nfIndexOf(column: number): number {
+    switch (column) {
+      case 5: return 0;
+      case 6: return 1;
+      case 7: return 2;
+      case 8: return 3;
+      default: return -1;
+    }
+  }
+
+  private currentValue(row: number, column: number): string {
+    let data: FeedData = this.rows[row];
+    if (column === 1) {
+      return data.shedNumber;
+    }
+    if (column === 2) {
+      return data.shedCount === 0 ? '' : Math.round(data.shedCount).toString();
+    }
+    let value: number = 0;
+    switch (column) {
+      case 3: value = data.average; break;
+      case 4: value = data.fermented; break;
+      case 5: value = data.powder; break;
+      case 6: value = data.feed03; break;
+      case 7: value = data.feed05; break;
+      case 8: value = data.feed10; break;
+      default: break;
+    }
+    return value === 0 ? '' : value.toFixed(2);
+  }
+
+  private clearRowData(row: FeedData, clearShedNumber: boolean): void {
+    if (clearShedNumber) {
+      row.shedNumber = '';
+    }
+    row.shedCount = 0;
+    row.average = 0;
+    row.fermented = 0;
+    row.powder = 0;
+    row.feed03 = 0;
+    row.feed05 = 0;
+    row.feed10 = 0;
+    row.water = 0;
+    row.weighed = 0;
+    row.shedCountBase = 0;
+    row.shedCountBaseSum = 0;
+    row.switchRatio = 0;
+    row.isAverageManuallyModified = false;
+  }
+
+  private sumBelowFirst(): number {
+    let sum: number = 0;
+    for (let i = 1; i < this.rows.length; i++) {
+      sum += this.rows[i].shedCount;
+    }
+    return sum;
+  }
+
+  private recomputeFirstRow(): void {
+    if (this.rows.length < 2) {
+      return;
+    }
+    let first: FeedData = this.rows[0];
+    let oldCount: number = first.shedCount;
+    let oldAverage: number = first.average;
+
+    if (!first.isShedCountManuallyModified) {
+      first.calculateShedCount();
+      first.shedCountBase = first.shedCount;
+      first.shedCountBaseSum = 0;
+    } else if (first.shedCountBase <= 0) {
+      if (first.shedCount > 0) {
+        first.shedCountBase = first.shedCount;
+        first.shedCountBaseSum = 0;
+      } else {
+        first.isShedCountManuallyModified = false;
+        first.calculateShedCount();
+        first.shedCountBase = first.shedCount;
+        first.shedCountBaseSum = 0;
+      }
+    }
+
+    let sum: number = this.sumBelowFirst();
+    let remainder: number = first.shedCountBase - (sum - first.shedCountBaseSum);
+    first.shedCount = remainder;
+
+    if (remainder !== oldCount && oldAverage > 0 && !first.isAverageManuallyModified) {
+      first.average = oldAverage;
+      first.isAverageManuallyModified = true;
+    }
+    first.recalculateDerivedOnly(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+  }
+
+  private applyEdit(text: string): void {
+    if (this.editRow < 0 || this.editCol < 0) {
+      return;
+    }
+    let row: FeedData = this.rows[this.editRow];
+    let value: string = text.trim();
+    let col: number = this.editCol;
+    let number: number = value.length === 0 ? 0 : Number(value);
+    if (isNaN(number)) {
+      number = 0;
+    }
+
+    if (col === 1) {
+      row.setShedNumber(value);
+      if (value.length === 0) {
+        this.clearRowData(row, true);
+      }
+    } else if (col === 2) {
+      let newCount: number = Math.round(number);
+      row.shedCount = newCount;
+      row.isShedCountManuallyModified = !(newCount === 0 || value.length === 0);
+      if (this.editRow === 0) {
+        row.shedCountBase = newCount;
+        row.shedCountBaseSum = this.sumBelowFirst();
+      }
+    } else if (col === 3) {
+      row.setAverageManually(number, this.fermentedInAverage);
+    } else {
+      let nfIndex: number = this.nfIndexOf(col);
+      let origin: number = nfIndex >= 0 ? row.getNonFermentedValue(nfIndex) : 0;
+      row.isAverageManuallyModified = false;
+      if (number === 0 && nfIndex >= 0) {
+        row.mergeSmallerWhenCleared(nfIndex, origin);
+      }
+      switch (col) {
+        case 4: row.fermented = number; break;
+        case 5: row.powder = number; break;
+        case 6: row.feed03 = number; break;
+        case 7: row.feed05 = number; break;
+        case 8: row.feed10 = number; break;
+        default: break;
+      }
+      row.switchRatio = 0;
+    }
+
+    if (this.editRow !== 0 && row.shedCount <= 0) {
+      row.fermented = 0;
+      row.powder = 0;
+      row.feed03 = 0;
+      row.feed05 = 0;
+      row.feed10 = 0;
+      row.water = 0;
+      row.weighed = 0;
+      row.average = 0;
+      row.isAverageManuallyModified = false;
+      row.switchRatio = 0;
+    }
+
+    if (this.editRow !== 0) {
+      row.updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+    }
+    this.recomputeFirstRow();
+    this.drawBody();
+    this.onChanged();
+  }
+
+  private openEditor(row: number, column: number): void {
+    if (!this.isEditableColumn(column) || row < 0 || row >= this.rows.length) {
+      return;
+    }
+    this.stopFling();
+    this.editRow = row;
+    this.editCol = column;
+    this.editorTitle = this.columnTitle(column) + ' · 第' + (row + 1).toString() + '行';
+    this.editorValue = this.currentValue(row, column);
+    this.editorIsNumber = column !== 1;
+    this.editorController.open();
+  }
+
+  private showHelp(): void {
+    AlertDialog.show({
+      title: '使用帮助',
+      message: '1. 第一行填总棚号（如 1-40），后面各行填细分棚号，第一行棚数自动扣减后续行。\n2. 点单元格修改数值，确定后自动算平均、水、称料。\n3. 棚号清空整行清空；棚数改 0 只保留棚号。',
+      confirm: {
+        value: '知道了',
+        action: () => {
+        }
+      }
+    });
+  }
+
+  private confirmReset(): void {
+    AlertDialog.show({
+      title: '重置数据',
+      message: '将清空当前表所有行，确定继续？',
+      primaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      },
+      secondaryButton: {
+        value: '确定',
+        action: () => {
+          this.resetAll();
+        }
+      }
+    });
+  }
+
+  private resetAll(): void {
+    for (let i = 0; i < this.rows.length; i++) {
+      this.clearRowData(this.rows[i], true);
+    }
+    this.drawBody();
+    this.onChanged();
+  }
+
+  private drawBody(): void {
+    if (this.viewW <= 0 || this.viewH <= 0) {
+      return;
+    }
+    this.ctx.clearRect(0, 0, this.viewW, this.viewH);
+    this.ctx.fillStyle = '#FFFFFF';
+    this.ctx.fillRect(0, 0, this.viewW, this.viewH);
+    this.clampOffsets();
+
+    for (let r = 0; r < this.rows.length; r++) {
+      let y: number = r * ROW_H - this.offsetY;
+      if (y + ROW_H < 0 || y > this.viewH) {
+        continue;
+      }
+      let row: FeedData = this.rows[r];
+
+      // 冻结序号列
+      this.ctx.fillStyle = '#FFFFFF';
+      this.ctx.fillRect(0, y, FROZEN_W, ROW_H);
+      this.ctx.strokeStyle = '#000000';
+      this.ctx.lineWidth = 0.5;
+      this.ctx.strokeRect(0, y, FROZEN_W, ROW_H);
+      this.ctx.fillStyle = '#666666';
+      this.ctx.font = 'bold 12vp sans-serif';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText((r + 1).toString(), FROZEN_W / 2, y + ROW_H / 2);
+
+      // 其余列
+      this.ctx.save();
+      this.ctx.beginPath();
+      this.ctx.rect(FROZEN_W, 0, Math.max(0, this.viewW - FROZEN_W), this.viewH);
+      this.ctx.clip();
+      for (let c = 1; c < WIDTHS.length; c++) {
+        let cx: number = this.xOfColumn(c) - this.offsetX;
+        if (cx + WIDTHS[c] <= FROZEN_W || cx > this.viewW) {
+          continue;
+        }
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillRect(cx, y, WIDTHS[c], ROW_H);
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 0.5;
+        this.ctx.strokeRect(cx, y, WIDTHS[c], ROW_H);
+        let text: string = this.cellText(row, c);
+        if (text.length > 0) {
+          this.ctx.fillStyle = this.cellColor(c);
+          this.ctx.font = 'bold 12vp sans-serif';
+          this.ctx.textAlign = 'center';
+          this.ctx.textBaseline = 'middle';
+          this.ctx.fillText(text, cx + WIDTHS[c] / 2, y + ROW_H / 2);
+        }
+      }
+      this.ctx.restore();
+    }
+    // 冻结尾线
+    this.ctx.strokeStyle = '#000000';
+    this.ctx.lineWidth = 0.5;
+    this.ctx.beginPath();
+    this.ctx.moveTo(FROZEN_W, 0);
+    this.ctx.lineTo(FROZEN_W, this.viewH);
+    this.ctx.stroke();
   }
 
   private stopFling(): void {
@@ -640,7 +542,6 @@ export struct MixCalcTable {
     }
   }
 
-  /** 松手后的惯性滑动：指数衰减，撞到边界即停该轴。 */
   private startFling(vx: number, vy: number): void {
     this.stopFling();
     let velocityX: number = vx;
@@ -671,7 +572,7 @@ export struct MixCalcTable {
       }
       this.offsetX = nextX;
       this.offsetY = nextY;
-      this.draw();
+      this.drawBody();
       if (Math.abs(velocityX) < 15 && Math.abs(velocityY) < 15) {
         this.stopFling();
       }
@@ -680,18 +581,6 @@ export struct MixCalcTable {
 
   aboutToDisappear(): void {
     this.stopFling();
-  }
-  private draw(): void {
-    if (this.widthVp <= 0 || this.heightVp <= 0) {
-      return;
-    }
-    this.ctx.clearRect(0, 0, this.widthVp, this.heightVp);
-    this.ctx.fillStyle = '#FFFFFF';
-    this.ctx.fillRect(0, 0, this.widthVp, this.heightVp);
-    this.clampOffsets();
-    this.drawBody();
-    this.drawHeader();
-    this.drawFooter();
   }
 
   aboutToAppear(): void {
@@ -702,49 +591,119 @@ export struct MixCalcTable {
   }
 
   build() {
-    Canvas(this.ctx)
+    Column() {
+      // ===== 表头（独立组件） =====
+      Row() {
+        Text(HEADS[0])
+          .width(FROZEN_W)
+          .height(HEAD_H)
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#000000')
+          .textAlign(TextAlign.Center)
+          .border({ width: 0.5, color: '#000000' })
+
+        Row() {
+          ForEach(HEADS.slice(1), (title: string, index: number) => {
+            Text(title)
+              .width(WIDTHS[index + 1])
+              .height(HEAD_H)
+              .fontSize(12)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#000000')
+              .textAlign(TextAlign.Center)
+              .border({ width: 0.5, color: '#000000' })
+          }, (title: string, index: number) => title + index.toString())
+        }
+        .translate({ x: -this.offsetX })
+      }
       .width('100%')
-      .height('100%')
-      .onReady(() => {
-        this.widthVp = this.ctx.width;
-        this.heightVp = this.ctx.height;
-        this.draw();
-      })
-      .onAreaChange((_oldValue: Area, newValue: Area) => {
-        this.widthVp = Number(newValue.width);
-        this.heightVp = Number(newValue.height);
-        this.draw();
-      })
-      .gesture(
-        PanGesture()
-          .onActionStart(() => {
-            this.stopFling();
-            this.lastPanX = 0;
-            this.lastPanY = 0;
-          })
-          .onActionUpdate((event: GestureEvent) => {
-            let dx: number = event.offsetX - this.lastPanX;
-            let dy: number = event.offsetY - this.lastPanY;
-            this.lastPanX = event.offsetX;
-            this.lastPanY = event.offsetY;
-            this.offsetX -= dx;
-            this.offsetY -= dy;
-            this.draw();
-          })
-          .onActionEnd((event: GestureEvent) => {
-            this.startFling(event.velocityX, event.velocityY);
-          })
-      )
-      .onClick((event: ClickEvent) => {
-        let y: number = event.y;
-        if (y < this.metrics.headH || y >= this.heightVp - this.metrics.footH) {
-          return;
+      .height(HEAD_H)
+      .backgroundColor('#E8F5E9')
+      .clip(true)
+
+      // ===== 表体 =====
+      Canvas(this.ctx)
+        .layoutWeight(1)
+        .width('100%')
+        .onReady(() => {
+          this.viewW = this.ctx.width;
+          this.viewH = this.ctx.height;
+          this.drawBody();
+        })
+        .onAreaChange((_oldValue: Area, newValue: Area) => {
+          this.viewW = Number(newValue.width);
+          this.viewH = Number(newValue.height);
+          this.drawBody();
+        })
+        .gesture(
+          PanGesture()
+            .onActionStart(() => {
+              this.stopFling();
+              this.lastPanX = 0;
+              this.lastPanY = 0;
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              let dx: number = event.offsetX - this.lastPanX;
+              let dy: number = event.offsetY - this.lastPanY;
+              this.lastPanX = event.offsetX;
+              this.lastPanY = event.offsetY;
+              this.offsetX -= dx;
+              this.offsetY -= dy;
+              this.drawBody();
+            })
+            .onActionEnd((event: GestureEvent) => {
+              this.startFling(event.velocityX, event.velocityY);
+            })
+        )
+        .onClick((event: ClickEvent) => {
+          let row: number = Math.floor((event.y + this.offsetY) / ROW_H);
+          if (row < 0 || row >= this.rows.length) {
+            return;
+          }
+          this.openEditor(row, this.columnAt(event.x));
+        })
+
+      // ===== 表尾（独立组件） =====
+      Row() {
+        Text(this.footerText(0))
+          .width(FROZEN_W)
+          .height(FOOT_H)
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#1F6B30')
+          .textAlign(TextAlign.Center)
+          .border({ width: 0.5, color: '#000000' })
+          .backgroundColor('#EAF3EC')
+
+        Row() {
+          ForEach(HEADS.slice(1), (title: string, index: number) => {
+            Text(this.footerText(index + 1))
+              .width(WIDTHS[index + 1])
+              .height(FOOT_H)
+              .fontSize(12)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.footerColor(index + 1))
+              .textAlign(TextAlign.Center)
+              .border({ width: 0.5, color: '#000000' })
+              .backgroundColor(this.footerCellBg(index + 1))
+              .onClick(() => {
+                if (index + 1 === 1) {
+                  this.showHelp();
+                } else if (index + 1 === 10) {
+                  this.confirmReset();
+                }
+              })
+          }, (title: string, index: number) => title + index.toString())
         }
-        let row: number = Math.floor((y - this.metrics.headH + this.offsetY) / this.metrics.rowH);
-        if (row < 0 || row >= this.rows.length) {
-          return;
-        }
-        this.openEditor(row, this.columnAt(event.x));
-      })
+        .translate({ x: -this.offsetX })
+      }
+      .width('100%')
+      .height(FOOT_H)
+      .backgroundColor('#EAF3EC')
+      .clip(true)
+    }
+    .width('100%')
+    .height('100%')
   }
 }

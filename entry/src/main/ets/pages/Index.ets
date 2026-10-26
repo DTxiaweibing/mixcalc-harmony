@@ -2,6 +2,7 @@ import { MixCalcTable } from '../table/MixCalcTable';
 import { FeedData } from '../model/FeedData';
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
+import { promptAction } from '@kit.ArkUI';
 
 const PREF_NAME: string = 'MixCalcPrefs';
 const KEY_DATA: string = 'saved_data';
@@ -62,6 +63,10 @@ struct Index {
     });
   }
 
+  private toast(message: string): void {
+    promptAction.showToast({ message: message, duration: 2000 });
+  }
+
   onPageHide(): void {
     this.saveRows();
   }
@@ -73,6 +78,45 @@ struct Index {
           Text('☰')
             .fontSize(22)
             .fontColor(Color.White)
+            .padding({ left: 4, right: 12, top: 4, bottom: 4 })
+            .bindMenu([
+              {
+                value: '快捷设置',
+                action: () => {
+                  this.toast('快捷设置：下一步接入列显示与冻结');
+                }
+              },
+              {
+                value: '批次（01 / 02）',
+                action: () => {
+                  this.toast('批次切换：下一步实现');
+                }
+              },
+              {
+                value: '使用帮助',
+                action: () => {
+                  this.toast('第一行填总棚号，其余行填细分棚号');
+                }
+              },
+              {
+                value: '选择语言',
+                action: () => {
+                  this.toast('中英文切换：下一步实现');
+                }
+              },
+              {
+                value: '隐私政策',
+                action: () => {
+                  this.toast('隐私政策：下一步接入');
+                }
+              },
+              {
+                value: '用户协议',
+                action: () => {
+                  this.toast('用户协议：下一步接入');
+                }
+              }
+            ])
         }
         .width('20%')
         .padding({ left: 10 })
