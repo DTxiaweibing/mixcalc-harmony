@@ -60,7 +60,8 @@ export class FeedData {
   }
   setShedNumber(value: string): void {
     this.shedNumber = value;
-    // 与安卓一致：改棚号后总是按文字重新解析棚数
+    // 与安卓一致：改棚号后总是按文字重新解析棚数（丢弃此前的手动覆盖）
+    this.isShedCountManuallyModified = false;
     this.calculateShedCount();
   }
 
