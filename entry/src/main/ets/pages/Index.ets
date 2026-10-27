@@ -305,36 +305,23 @@ struct Index {
     this.toast(t(this.lang, 'ferment.status').replace('%s', status));
   }
 
-  private handleColumnAction(action: string, index: number): void {
-    if (this.batches.length === 0 || index < 0 || index >= COLUMN_IDS.length) {
+  private handleColumnAction(action: string, index: number, vis: boolean[], fix: boolean[]): void {
+    if (this.batches.length === 0) {
       return;
     }
     const batch: Batch = this.currentBatch();
-    const id: string = COLUMN_IDS[index];
-    if (id === 'seq') {
-      return;
+    for (let i = 1; i < COLUMN_IDS.length; i++) {
+      batch.columnVisibility[COLUMN_IDS[i]] = vis[i];
+      batch.columnFixed[COLUMN_IDS[i]] = fix[i];
     }
-    if (action === 'toggle-fixed') {
-      const next: boolean = batch.columnFixed[id] !== true;
-      batch.columnFixed[id] = next;
-      this.toast(COLUMN_HEADS[index] + t(this.lang, next ? 'toast.fixed' : 'toast.unfixed'));
-    } else if (action === 'toggle-visible') {
-      const next: boolean = batch.columnVisibility[id] === false;
-      batch.columnVisibility[id] = next;
-      this.toast(COLUMN_HEADS[index] + t(this.lang, next ? 'toast.shown' : 'toast.hidden'));
-    } else if (action === 'show-all') {
-      for (let i = 1; i < COLUMN_IDS.length; i++) {
-        batch.columnVisibility[COLUMN_IDS[i]] = true;
+    if (index >= 0 && index < COLUMN_IDS.length) {
+      if (action === "sync-shown") {
+        this.toast(COLUMN_HEADS[index] + "列已显示");
+      } else if (action === "sync-hidden") {
+        this.toast(COLUMN_HEADS[index] + "列已隐藏");
       }
-      this.toast(t(this.lang, 'toast.allShown'));
-    } else if (action === 'unfix-all') {
-      for (let i = 1; i < COLUMN_IDS.length; i++) {
-        batch.columnFixed[COLUMN_IDS[i]] = false;
-      }
-      this.toast(t(this.lang, 'toast.allUnfixed'));
     }
     this.saveAll();
-    this.rebuildTable();
   }
 
   private selectLanguage(pref: string): void {
@@ -439,16 +426,16 @@ struct Index {
             fermentedInWater: this.fermentWater,
             fermentedInAverage: this.fermentAvg,
             lang: this.lang,
-            visibleMask: this.visibleMask(),
-            fixedMask: this.fixedMask(),
+            initVisible: this.visibleMask(),
+            initFixed: this.fixedMask(),
             onChanged: () => {
               this.saveAll();
             },
             onHelp: () => {
               this.openPage('help/index.html');
             },
-            onColumnAction: (action: string, index: number) => {
-              this.handleColumnAction(action, index);
+            onColumnAction: (action: string, index: number, vis: boolean[], fix: boolean[]) => {
+              this.handleColumnAction(action, index, vis, fix);
             },
             onWaterChange: (percent: number) => {
               this.setWaterPercentage(percent);

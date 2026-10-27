@@ -17,6 +17,7 @@ struct CellEditorDialog {
   onConfirm: (value: string) => void = () => {};
   @State input: string = '';
 
+
   aboutToAppear(): void {
     this.input = this.initValue;
   }
@@ -157,17 +158,20 @@ export struct MixCalcTable {
   rows: FeedData[] = [];
   onChanged: () => void = () => {};
   onHelp: () => void = () => {};
-  onColumnAction: (action: string, index: number) => void = () => {};
+  onColumnAction: (action: string, index: number, vis: boolean[], fix: boolean[]) => void = () => {};
   onWaterChange: (percent: number) => void = () => {};
   onFermentChange: (which: number) => void = () => {};
 
-  @Prop visibleMask: boolean[] = [];
-  @Prop fixedMask: boolean[] = [];
+  initVisible: boolean[] = [];
+  initFixed: boolean[] = [];
+
+  @State vis: boolean[] = [];
+  @State fix: boolean[] = [];
 
   @Prop lang: string = 'zh';
-  @Prop waterPercentage: number = 20;
-  @Prop fermentedInWater: boolean = false;
-  @Prop fermentedInAverage: boolean = false;
+  @Prop @Watch('onSettingsChanged') waterPercentage: number = 20;
+  @Prop @Watch('onSettingsChanged') fermentedInWater: boolean = false;
+  @Prop @Watch('onSettingsChanged') fermentedInAverage: boolean = false;
 
   @State offsetX: number = 0;
   @State offsetY: number = 0;
@@ -235,14 +239,14 @@ export struct MixCalcTable {
     if (index === 0) {
       return true;
     }
-    return this.visibleMask.length > index ? this.visibleMask[index] : true;
+    return this.vis.length > index ? this.vis[index] : true;
   }
 
   private isFixed(index: number): boolean {
     if (index === 0) {
       return true;
     }
-    return this.fixedMask.length > index ? this.fixedMask[index] : false;
+    return this.fix.length > index ? this.fix[index] : false;
   }
 
   private fixedIndices(): number[] {
@@ -645,15 +649,30 @@ export struct MixCalcTable {
     if (index < 0) {
       return;
     }
-    if (choice === 0) {
-      this.onColumnAction('toggle-fixed', index);
-    } else if (choice === 1) {
-      this.onColumnAction('toggle-visible', index);
-    } else if (choice === 2) {
-      this.onColumnAction('show-all', index);
-    } else if (choice === 3) {
-      this.onColumnAction('unfix-all', index);
+    const vis: boolean[] = [];
+    for (let i = 0; i < COLUMN_IDS.length; i++) {
+      vis.push(i === 0 ? true : (this.vis.length > i ? this.vis[i] : true));
     }
+    const fix: boolean[] = [];
+    for (let i = 0; i < COLUMN_IDS.length; i++) {
+      fix.push(i === 0 ? true : (this.fix.length > i ? this.fix[i] : false));
+    }
+    if (choice === 0) {
+      fix[index] = !fix[index];
+    } else if (choice === 1) {
+      vis[index] = !vis[index];
+    } else if (choice === 2) {
+      for (let i = 1; i < vis.length; i++) {
+        vis[i] = true;
+      }
+    } else if (choice === 3) {
+      for (let i = 1; i < fix.length; i++) {
+        fix[i] = false;
+      }
+    }
+    this.vis = vis;
+    this.fix = fix;
+    this.onColumnAction('sync', index, this.vis, this.fix);
   }
 
   // ===== 水 / 发酵料 =====
@@ -862,7 +881,21 @@ export struct MixCalcTable {
     this.stopFling();
   }
 
+  onSettingsChanged(): void {
+    for (let i = 0; i < this.rows.length; i++) {
+      this.rows[i].updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+    }
+    this.recomputeFirstRow();
+    this.version = this.version + 1;
+  }
+
   aboutToAppear(): void {
+    if (this.initVisible.length > 0) {
+      this.vis = this.initVisible;
+    }
+    if (this.initFixed.length > 0) {
+      this.fix = this.initFixed;
+    }
     for (let i = 0; i < this.rows.length; i++) {
       this.rows[i].updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
     }
@@ -953,14 +986,14 @@ export struct MixCalcTable {
           Row() {
             ForEach(this.normalIndices(), (col: number) => {
               this.headerCell(col)
-            }, (col: number) => 'h' + col.toString())
+            }, (col: number) => 'h' + col.toString() + '_' + this.version.toString())
           }
           .translate({ x: this.frozenWidth() - this.offsetX })
 
           Row() {
             ForEach(this.fixedIndices(), (col: number) => {
               this.headerCell(col)
-            }, (col: number) => 'hf' + col.toString())
+            }, (col: number) => 'hf' + col.toString() + '_' + this.version.toString())
           }
           .zIndex(1)
         }
@@ -1032,14 +1065,14 @@ export struct MixCalcTable {
           Row() {
             ForEach(this.normalIndices(), (col: number) => {
               this.footerCell(col)
-            }, (col: number) => 'f' + col.toString())
+            }, (col: number) => 'f' + col.toString() + '_' + this.version.toString())
           }
           .translate({ x: this.frozenWidth() - this.offsetX })
 
           Row() {
             ForEach(this.fixedIndices(), (col: number) => {
               this.footerCell(col)
-            }, (col: number) => 'ff' + col.toString())
+            }, (col: number) => 'ff' + col.toString() + '_' + this.version.toString())
           }
           .zIndex(1)
         }
