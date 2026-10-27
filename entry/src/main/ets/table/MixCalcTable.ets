@@ -224,9 +224,9 @@ export struct MixCalcTable {
   fixedMask: boolean[] = [];
 
   @Prop lang: string = 'zh';
-  waterPercentage: number = 20;
-  fermentedInWater: boolean = false;
-  fermentedInAverage: boolean = false;
+  @Prop waterPercentage: number = 20;
+  @Prop fermentedInWater: boolean = false;
+  @Prop fermentedInAverage: boolean = false;
 
   @State offsetX: number = 0;
   @State offsetY: number = 0;
@@ -1100,7 +1100,7 @@ export struct MixCalcTable {
         Column()
           .width('100%')
           .height('100%')
-          .backgroundColor('#00000000')
+          .backgroundColor('#01000000')
           .onTouch((event: TouchEvent) => {
             if (event.touches.length === 0) {
               return;
@@ -1116,15 +1116,16 @@ export struct MixCalcTable {
                 this.downMoved = true;
               }
             } else if (event.type === TouchType.Up) {
-              if (this.downMoved) {
-                return;
-              }
-              if (Date.now() - this.downAt >= 300) {
-                this.handleFeedLongPress(this.downX, this.downY);
-              } else {
-                const row: number = Math.floor((this.downY + this.offsetY) / ROW_H);
-                if (row >= 0 && row < this.rows.length) {
-                  this.openEditor(row, this.columnAt(this.downX));
+              const dt: number = Date.now() - this.downAt;
+              promptAction.showToast({ message: 'body ' + dt.toString(), duration: 1500 });
+              if (!this.downMoved) {
+                if (dt >= 300) {
+                  this.handleFeedLongPress(this.downX, this.downY);
+                } else {
+                  const row: number = Math.floor((this.downY + this.offsetY) / ROW_H);
+                  if (row >= 0 && row < this.rows.length) {
+                    this.openEditor(row, this.columnAt(this.downX));
+                  }
                 }
               }
             }
