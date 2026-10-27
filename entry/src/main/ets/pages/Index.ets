@@ -7,8 +7,6 @@ import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
 import { t } from '../common/Strings';
 import { i18n } from '@kit.LocalizationKit';
-import { bundleManager } from '@kit.AbilityKit';
-import { util } from '@kit.ArkTS';
 
 const PREF_NAME: string = 'MixCalcPrefs';
 const ROW_COUNT: number = 30;
@@ -40,7 +38,6 @@ struct Index {
   @State batchMenuOpen: boolean = false;
   @State menuWidth: number = 140;
   @State screenW: number = 360;
-  @State isTablet: boolean = false;
   @State settingsOpen: boolean = false;
   @State settingsVersion: number = 0;
   @State lang: string = 'zh';
@@ -49,9 +46,6 @@ struct Index {
   @State fermentAvg: boolean = false;
   @State langPref: string = '';
   @State langOpen: boolean = false;
-  @State consentOpen: boolean = false;
-  @State consentTitle: string = '隐私政策与使用协议';
-  @State consentBody: string = '';
 
   private menuItems(): MenuItem[] {
     return [
@@ -113,87 +107,10 @@ struct Index {
       const widthVp = this.getUIContext().px2vp(info.width);
       this.menuWidth = Math.max(140, widthVp / 3);
       this.screenW = widthVp;
-      this.isTablet = Math.min(widthVp, px2vp(info.height)) >= 600;
     } catch (e) {
       this.menuWidth = 140;
     }
   }
-
-  private async checkConsent(): Promise<void> {
-    if (this.store === null) {
-      return;
-    }
-    let agreed: number = 0;
-    try {
-      agreed = await this.store.get('privacy_agreed_version', 0) as number;
-    } catch (e) {
-      agreed = 0;
-    }
-    let versionCode: number = 0;
-    try {
-      const info = await bundleManager.getBundleInfoForSelf(
-        bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT);
-      versionCode = info.versionCode;
-    } catch (e) {
-      versionCode = 0;
-    }
-    if (versionCode > 0 && agreed >= versionCode) {
-      return;
-    }
-    this.loadConsentText();
-    this.consentOpen = true;
-  }
-
-  private loadConsentText(): void {
-    try {
-      const ctx = getContext(this) as common.UIAbilityContext;
-      const path: string = this.lang === 'en'
-        ? 'en/privacy_consent.txt'
-        : '隐私政策与使用协议弹窗.txt';
-      const bytes = ctx.resourceManager.getRawFileContentSync(path);
-      const decoder = util.TextDecoder.create('utf-8');
-      const text: string = decoder.decodeToString(bytes);
-      const lines: string[] = text.split('\n');
-      let title: string = '';
-      let body: string = '';
-      for (let i = 0; i < lines.length; i++) {
-        const line: string = lines[i].trim();
-        if (line.length === 0 || line.startsWith('【') || line.startsWith('[')) {
-          continue;
-        }
-        if (title.length === 0) {
-          title = line;
-        } else {
-          body += (body.length > 0 ? '\n\n' : '') + line;
-        }
-      }
-      if (title.length > 0) {
-        this.consentTitle = title;
-      }
-      this.consentBody = body;
-    } catch (e) {
-      this.consentBody = '隐私政策与使用协议内容加载失败';
-    }
-  }
-
-  private agreeConsent(): void {
-    this.consentOpen = false;
-    if (this.store !== null) {
-      bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT)
-        .then((info: bundleManager.BundleInfo) => {
-          this.store?.put('privacy_agreed_version', info.versionCode).then(() => {
-            this.store?.flush();
-          });
-        });
-    }
-  }
-
-  private declineConsent(): void {
-    const ctx = getContext(this) as common.UIAbilityContext;
-    ctx.terminateSelf();
-  }
-
-
 
   private syncBatchSettings(): void {
     const batch: Batch = this.currentBatch();
@@ -381,12 +298,6 @@ struct Index {
     if (!changed) {
       this.toast(t(this.lang, 'ferment.nochange'));
       return;
-    }
-    if (which === 2 || which === 3) {
-      const rows: FeedData[] = this.currentBatch().rows;
-      for (let i = 0; i < rows.length; i++) {
-        rows[i].isAverageManuallyModified = false;
-      }
     }
     this.saveAll();
     const status: string = (this.fermentWater ? t(this.lang, 'ferment.inWater') : t(this.lang, 'ferment.exWater'))
@@ -796,93 +707,6 @@ struct Index {
         }
         .width('100%')
         .height('100%')
-      }
-
-      if (this.consentOpen) {
-        Column()
-          .width('100%')
-          .height('100%')
-          .backgroundColor('#66000000')
-
-        Column() {
-          Text(this.consentTitle)
-            .fontSize(18)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#000000')
-            .textAlign(TextAlign.Center)
-            .padding({ top: 16, bottom: 12, left: 16, right: 16 })
-
-          Divider().strokeWidth(1).color('#E0E0E0')
-
-          Scroll() {
-            Text(this.consentBody)
-              .fontSize(15)
-              .fontColor('#333333')
-              .lineHeight(24)
-              .padding({ left: 16, right: 16, top: 14, bottom: 14 })
-          }
-          .height(200)
-          .width('100%')
-
-          Row() {
-            Text(t(this.lang, 'menu.terms'))
-              .fontSize(14)
-              .fontColor('#1F6B30')
-              .decoration({ type: TextDecorationType.Underline, color: '#1F6B30' })
-              .onClick(() => {
-                this.openPage('user.html');
-              })
-            Text(this.lang === 'en' ? 'Privacy Policy' : '隐私政策')
-              .fontSize(14)
-              .fontColor('#1F6B30')
-              .decoration({ type: TextDecorationType.Underline, color: '#1F6B30' })
-              .margin({ left: 24 })
-              .onClick(() => {
-                this.openPage('privacy.html');
-              })
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, bottom: 14 })
-
-          Divider().strokeWidth(1).color('#E0E0E0')
-
-          Row() {
-            Button(t(this.lang, 'btn.cancel'))
-              .type(ButtonType.Normal)
-              .layoutWeight(1)
-              .height(48)
-              .borderRadius(0)
-              .backgroundColor(Color.Transparent)
-              .fontSize(15)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#666666')
-              .onClick(() => {
-                this.declineConsent();
-              })
-
-            Divider().vertical(true).height(48).strokeWidth(1).color('#E0E0E0')
-
-            Button(this.lang === 'en' ? 'Agree' : '同意')
-              .type(ButtonType.Normal)
-              .layoutWeight(1)
-              .height(48)
-              .borderRadius(0)
-              .backgroundColor(Color.Transparent)
-              .fontSize(15)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#2D8C42')
-              .onClick(() => {
-                this.agreeConsent();
-              })
-          }
-          .width('100%')
-          .height(48)
-        }
-        .width('85%')
-        .backgroundColor(Color.White)
-        .borderRadius(12)
-        .clip(true)
-        .position({ x: (this.screenW - this.screenW * 0.85) / 2, y: 140 })
       }
 
     }

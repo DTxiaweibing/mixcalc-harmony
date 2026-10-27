@@ -1,11 +1,9 @@
 import { FeedData } from '../model/FeedData';
 import { t } from '../common/Strings';
-import { display } from '@kit.ArkUI';
 
 const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
 const HEAD_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
 const WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
-const BASE_WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
 const ROW_H: number = 40;
 const HEAD_H: number = 40;
 const FOOT_H: number = 40;
@@ -180,8 +178,6 @@ export struct MixCalcTable {
   @State viewW: number = 0;
   @State viewH: number = 0;
   @State version: number = 0;
-  @State colWidths: number[] = [];
-  private isTablet: boolean = false;
 
   @State colMenuOpen: boolean = false;
   @State colMenuX: number = 0;
@@ -273,65 +269,11 @@ export struct MixCalcTable {
     return result;
   }
 
-  private widthOf(col: number): number {
-    if (this.colWidths.length > col && this.colWidths[col] > 0) {
-      return this.colWidths[col];
-    }
-    return BASE_WIDTHS[col];
-  }
-
-  /** 平板按安卓 TabletLayout.computeWidths：均分屏宽 + 语义加权 + 50~120 限幅 + 缩放铺满。 */
-  private computeWidths(): void {
-    if (!this.isTablet || this.viewW <= 0) {
-      this.colWidths = [];
-      return;
-    }
-    let visibleCount: number = 0;
-    for (let i = 0; i < WIDTHS.length; i++) {
-      if (this.isVisible(i)) {
-        visibleCount++;
-      }
-    }
-    if (visibleCount === 0) {
-      visibleCount = 1;
-    }
-    const base: number = this.viewW / visibleCount;
-    const minWidth: number = 50;
-    const maxWidth: number = 120;
-    const result: number[] = [];
-    for (let i = 0; i < WIDTHS.length; i++) {
-      if (!this.isVisible(i)) {
-        result.push(0);
-        continue;
-      }
-      let w: number = base;
-      if (i === 1 || i === 10) {
-        w = base * 1.2;
-      }
-      if (i === 0 || i === 3) {
-        w = base * 0.8;
-      }
-      w = Math.max(minWidth, Math.min(w, maxWidth));
-      result.push(w);
-    }
-    let total: number = 0;
-    for (let i = 0; i < result.length; i++) {
-      total += result[i];
-    }
-    if (total > 0 && Math.abs(total - this.viewW) > 16) {
-      const scale: number = this.viewW / total;
-      for (let i = 0; i < result.length; i++) {
-        result[i] = result[i] * scale;
-      }
-    }
-    this.colWidths = result;
-  }
-
   private frozenWidth(): number {
     let w: number = 0;
     const fixed: number[] = this.fixedIndices();
     for (let i = 0; i < fixed.length; i++) {
-      w += this.widthOf(fixed[i]);
+      w += WIDTHS[fixed[i]];
     }
     return w;
   }
@@ -340,7 +282,7 @@ export struct MixCalcTable {
     let w: number = 0;
     const normal: number[] = this.normalIndices();
     for (let i = 0; i < normal.length; i++) {
-      w += this.widthOf(normal[i]);
+      w += WIDTHS[normal[i]];
     }
     return w;
   }
@@ -373,7 +315,7 @@ export struct MixCalcTable {
       if (fixed[i] === index) {
         return x;
       }
-      x += this.widthOf(fixed[i]);
+      x += WIDTHS[fixed[i]];
     }
     let nx: number = 0;
     const normal: number[] = this.normalIndices();
@@ -381,7 +323,7 @@ export struct MixCalcTable {
       if (normal[i] === index) {
         return this.frozenWidth() + nx - this.offsetX;
       }
-      nx += this.widthOf(normal[i]);
+      nx += WIDTHS[normal[i]];
     }
     return 0;
   }
@@ -963,7 +905,7 @@ export struct MixCalcTable {
   @Builder
   cellView(row: FeedData, col: number, r: number) {
     Text(this.cellText(row, col, r))
-      .width(this.widthOf(col))
+      .width(WIDTHS[col])
       .height(ROW_H)
       .fontSize(12)
       .fontWeight(FontWeight.Bold)
@@ -987,7 +929,7 @@ export struct MixCalcTable {
   @Builder
   headerCell(col: number) {
     Text(this.headLabel(col))
-      .width(this.widthOf(col))
+      .width(WIDTHS[col])
       .height(HEAD_H)
       .fontSize(12)
       .fontWeight(FontWeight.Bold)
@@ -1018,7 +960,7 @@ export struct MixCalcTable {
   @Builder
   footerCell(col: number) {
     Text(this.footerText(col))
-      .width(this.widthOf(col))
+      .width(WIDTHS[col])
       .height(FOOT_H)
       .fontSize(12)
       .fontWeight(FontWeight.Bold)
