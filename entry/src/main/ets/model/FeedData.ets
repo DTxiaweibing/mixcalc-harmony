@@ -60,9 +60,8 @@ export class FeedData {
   }
   setShedNumber(value: string): void {
     this.shedNumber = value;
-    if (!this.isShedCountManuallyModified) {
-      this.calculateShedCount();
-    }
+    // 与安卓一致：改棚号后总是按文字重新解析棚数
+    this.calculateShedCount();
   }
 
   private isValidNumber(text: string): boolean {

@@ -580,7 +580,7 @@ struct Index {
             if (col < 9) {
               Divider().strokeWidth(1).color('#E0E0E0')
             }
-          }, (col: number) => 'set' + col.toString())
+          }, (col: number) => 'set' + col.toString() + '_' + this.settingsVersion.toString())
 
           Divider()
             .strokeWidth(1)
