@@ -1073,17 +1073,18 @@ export struct MixCalcTable {
           Divider().strokeWidth(1).color('#E0E0E0')
 
           ForEach(this.colMenuItems, (item: string, index: number) => {
-            Button(item)
-              .type(ButtonType.Normal)
-              .width('100%')
-              .height(40)
-              .borderRadius(0)
-              .backgroundColor(Color.Transparent)
-              .fontSize(15)
-              .fontColor('#333333')
-              .onClick(() => {
-                this.handleColumnChoice(index);
-              })
+            Row() {
+              Text(item)
+                .layoutWeight(1)
+                .fontSize(15)
+                .fontColor('#333333')
+                .textAlign(TextAlign.Center)
+            }
+            .width('100%')
+            .height(40)
+            .onClick(() => {
+              this.handleColumnChoice(index);
+            })
             if (index < this.colMenuItems.length - 1) {
               Divider().strokeWidth(1).color('#E0E0E0')
             }

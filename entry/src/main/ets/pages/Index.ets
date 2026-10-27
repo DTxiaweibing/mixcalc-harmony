@@ -41,6 +41,9 @@ struct Index {
   @State settingsOpen: boolean = false;
   @State settingsVersion: number = 0;
   @State lang: string = 'zh';
+  @State waterPct: number = 20;
+  @State fermentWater: boolean = false;
+  @State fermentAvg: boolean = false;
   @State langPref: string = '';
   @State langOpen: boolean = false;
 
@@ -97,6 +100,7 @@ struct Index {
         this.lang = 'zh';
       }
     }
+    this.syncBatchSettings();
     this.ready = true;
     try {
       const info = display.getDefaultDisplaySync();
@@ -106,6 +110,13 @@ struct Index {
     } catch (e) {
       this.menuWidth = 140;
     }
+  }
+
+  private syncBatchSettings(): void {
+    const batch: Batch = this.currentBatch();
+    this.waterPct = batch.waterPercentage;
+    this.fermentWater = batch.fermentedInWater;
+    this.fermentAvg = batch.fermentedInAverage;
   }
 
   private currentBatch(): Batch {
@@ -154,6 +165,7 @@ struct Index {
     }
     this.saveAll();
     this.activeBatch = index;
+    this.syncBatchSettings();
     this.saveAll();
     this.rebuildTable();
   }
@@ -258,24 +270,28 @@ struct Index {
 
   private setWaterPercentage(percent: number): void {
     this.currentBatch().waterPercentage = percent;
+    this.waterPct = percent;
     this.saveAll();
-    this.rebuildTable();
     this.toast(t(this.lang, 'water.saved').replace('%d', percent.toString()));
   }
 
   private setFermentOption(which: number): void {
     const batch: Batch = this.currentBatch();
     let changed: boolean = false;
-    if (which === 0 && !batch.fermentedInWater) {
+    if (which === 0 && !this.fermentWater) {
+      this.fermentWater = true;
       batch.fermentedInWater = true;
       changed = true;
-    } else if (which === 1 && batch.fermentedInWater) {
+    } else if (which === 1 && this.fermentWater) {
+      this.fermentWater = false;
       batch.fermentedInWater = false;
       changed = true;
-    } else if (which === 2 && !batch.fermentedInAverage) {
+    } else if (which === 2 && !this.fermentAvg) {
+      this.fermentAvg = true;
       batch.fermentedInAverage = true;
       changed = true;
-    } else if (which === 3 && batch.fermentedInAverage) {
+    } else if (which === 3 && this.fermentAvg) {
+      this.fermentAvg = false;
       batch.fermentedInAverage = false;
       changed = true;
     }
@@ -284,9 +300,8 @@ struct Index {
       return;
     }
     this.saveAll();
-    this.rebuildTable();
-    const status: string = (batch.fermentedInWater ? t(this.lang, 'ferment.inWater') : t(this.lang, 'ferment.exWater'))
-      + '，' + (batch.fermentedInAverage ? t(this.lang, 'ferment.inAvg') : t(this.lang, 'ferment.exAvg'));
+    const status: string = (this.fermentWater ? t(this.lang, 'ferment.inWater') : t(this.lang, 'ferment.exWater'))
+      + '，' + (this.fermentAvg ? t(this.lang, 'ferment.inAvg') : t(this.lang, 'ferment.exAvg'));
     this.toast(t(this.lang, 'ferment.status').replace('%s', status));
   }
 
@@ -420,9 +435,9 @@ struct Index {
         if (this.ready) {
           MixCalcTable({
             rows: this.currentBatch().rows,
-            waterPercentage: this.currentBatch().waterPercentage,
-            fermentedInWater: this.currentBatch().fermentedInWater,
-            fermentedInAverage: this.currentBatch().fermentedInAverage,
+            waterPercentage: this.waterPct,
+            fermentedInWater: this.fermentWater,
+            fermentedInAverage: this.fermentAvg,
             lang: this.lang,
             visibleMask: this.visibleMask(),
             fixedMask: this.fixedMask(),
