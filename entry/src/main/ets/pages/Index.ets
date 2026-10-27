@@ -40,6 +40,7 @@ struct Index {
   @State batchMenuOpen: boolean = false;
   @State menuWidth: number = 140;
   @State screenW: number = 360;
+  @State isTablet: boolean = false;
   @State settingsOpen: boolean = false;
   @State settingsVersion: number = 0;
   @State lang: string = 'zh';
@@ -112,6 +113,7 @@ struct Index {
       const widthVp = this.getUIContext().px2vp(info.width);
       this.menuWidth = Math.max(140, widthVp / 3);
       this.screenW = widthVp;
+      this.isTablet = Math.min(widthVp, px2vp(info.height)) >= 600;
     } catch (e) {
       this.menuWidth = 140;
     }
