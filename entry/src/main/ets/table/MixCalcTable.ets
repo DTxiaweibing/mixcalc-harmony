@@ -5,6 +5,7 @@ import { display } from '@kit.ArkUI';
 const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
 const HEAD_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
 const WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
+const BASE_WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
 const ROW_H: number = 40;
 const HEAD_H: number = 40;
 const FOOT_H: number = 40;
@@ -276,7 +277,7 @@ export struct MixCalcTable {
     if (this.colWidths.length > col && this.colWidths[col] > 0) {
       return this.colWidths[col];
     }
-    return this.widthOf(col);
+    return BASE_WIDTHS[col];
   }
 
   /** 平板按安卓 TabletLayout.computeWidths：均分屏宽 + 语义加权 + 50~120 限幅 + 缩放铺满。 */
