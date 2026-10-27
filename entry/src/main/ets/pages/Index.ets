@@ -227,6 +227,40 @@ struct Index {
     this.tableGen = this.tableGen + 1;
   }
 
+  private setWaterPercentage(percent: number): void {
+    this.currentBatch().waterPercentage = percent;
+    this.saveAll();
+    this.rebuildTable();
+    this.toast(t(this.lang, 'water.saved').replace('%d', percent.toString()));
+  }
+
+  private setFermentOption(which: number): void {
+    const batch: Batch = this.currentBatch();
+    let changed: boolean = false;
+    if (which === 0 && !batch.fermentedInWater) {
+      batch.fermentedInWater = true;
+      changed = true;
+    } else if (which === 1 && batch.fermentedInWater) {
+      batch.fermentedInWater = false;
+      changed = true;
+    } else if (which === 2 && !batch.fermentedInAverage) {
+      batch.fermentedInAverage = true;
+      changed = true;
+    } else if (which === 3 && batch.fermentedInAverage) {
+      batch.fermentedInAverage = false;
+      changed = true;
+    }
+    if (!changed) {
+      this.toast(t(this.lang, 'ferment.nochange'));
+      return;
+    }
+    this.saveAll();
+    this.rebuildTable();
+    const status: string = (batch.fermentedInWater ? t(this.lang, 'ferment.inWater') : t(this.lang, 'ferment.exWater'))
+      + '，' + (batch.fermentedInAverage ? t(this.lang, 'ferment.inAvg') : t(this.lang, 'ferment.exAvg'));
+    this.toast(t(this.lang, 'ferment.status').replace('%s', status));
+  }
+
   private handleColumnAction(action: string, index: number): void {
     if (this.batches.length === 0 || index < 0 || index >= COLUMN_IDS.length) {
       return;

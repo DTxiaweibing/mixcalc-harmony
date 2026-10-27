@@ -204,6 +204,15 @@ export struct MixCalcTable {
   onChanged: () => void = () => {};
   onHelp: () => void = () => {};
   onColumnAction: (action: string, index: number) => void = () => {};
+  onWaterChange: (percent: number) => void = () => {};
+  onFermentChange: (which: number) => void = () => {};
+
+  @State pickOpen: boolean = false;
+  @State pickX: number = 0;
+  @State pickY: number = 0;
+  @State pickTitle: string = '';
+  @State pickItems: string[] = [];
+  private pickKind: string = '';
 
   visibleMask: boolean[] = [];
   fixedMask: boolean[] = [];
@@ -773,7 +782,44 @@ export struct MixCalcTable {
     this.ratioOpen = false;
     this.drawBody();
     this.onChanged();
-  }  private showColumnMenu(index: number): void {
+  }  private showWaterPicker(col: number): void {
+    const items: string[] = [];
+    for (let pct = 10; pct <= 40; pct += 5) {
+      items.push(t(this.lang, 'col.water') + pct.toString() + '%');
+    }
+    this.pickKind = 'water';
+    this.pickTitle = t(this.lang, 'water.title');
+    this.pickItems = items;
+    this.pickX = Math.max(0, Math.min(this.columnLeft(col), Math.max(0, this.viewW - 180)));
+    this.pickY = HEAD_H;
+    this.pickOpen = true;
+  }
+
+  private showFermentPicker(col: number): void {
+    const items: string[] = [
+      (this.fermentedInWater ? '● ' : '○ ') + t(this.lang, 'ferment.inWater'),
+      (this.fermentedInWater ? '○ ' : '● ') + t(this.lang, 'ferment.exWater'),
+      (this.fermentedInAverage ? '● ' : '○ ') + t(this.lang, 'ferment.inAvg'),
+      (this.fermentedInAverage ? '○ ' : '● ') + t(this.lang, 'ferment.exAvg')
+    ];
+    this.pickKind = 'ferment';
+    this.pickTitle = t(this.lang, 'ferment.title');
+    this.pickItems = items;
+    this.pickX = Math.max(0, Math.min(this.columnLeft(col), Math.max(0, this.viewW - 200)));
+    this.pickY = HEAD_H;
+    this.pickOpen = true;
+  }
+
+  private applyPick(index: number): void {
+    this.pickOpen = false;
+    if (this.pickKind === 'water') {
+      this.onWaterChange(10 + index * 5);
+    } else if (this.pickKind === 'ferment') {
+      this.onFermentChange(index);
+    }
+  }
+
+  private showColumnMenu(index: number): void {
     if (index === 0) {
       return;
     }
@@ -958,8 +1004,16 @@ export struct MixCalcTable {
               .fontWeight(FontWeight.Bold)
               .fontColor('#000000')
               .textAlign(TextAlign.Center)
-              .border({ width: 0.5, color: '#000000' })
-              .backgroundColor('#E8F5E9')
+              .border({ width: col === 4 && this.fermentedInAverage ? 1.5 : 0.5, color: col === 4 && this.fermentedInAverage ? '#6E511E' : '#000000' })
+
+              .backgroundColor(col === 4 && this.fermentedInWater ? '#F0F8F0' : '#E8F5E9')
+              .onClick(() => {
+                if (col === 9) {
+                  this.showWaterPicker(col);
+                } else if (col === 4) {
+                  this.showFermentPicker(col);
+                }
+              })
               .gesture(LongPressGesture().onAction(() => {
                 this.showColumnMenu(col);
               }))
@@ -976,8 +1030,16 @@ export struct MixCalcTable {
               .fontWeight(FontWeight.Bold)
               .fontColor('#000000')
               .textAlign(TextAlign.Center)
-              .border({ width: 0.5, color: '#000000' })
-              .backgroundColor('#E8F5E9')
+              .border({ width: col === 4 && this.fermentedInAverage ? 1.5 : 0.5, color: col === 4 && this.fermentedInAverage ? '#6E511E' : '#000000' })
+
+              .backgroundColor(col === 4 && this.fermentedInWater ? '#F0F8F0' : '#E8F5E9')
+              .onClick(() => {
+                if (col === 9) {
+                  this.showWaterPicker(col);
+                } else if (col === 4) {
+                  this.showFermentPicker(col);
+                }
+              })
               .gesture(LongPressGesture().onAction(() => {
                 this.showColumnMenu(col);
               }))
@@ -1162,6 +1224,48 @@ export struct MixCalcTable {
         .clip(true)
         .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
         .position({ x: this.ratioX, y: this.ratioY })
+      }
+
+      if (this.pickOpen) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor('#00000000')
+          .onClick(() => {
+            this.pickOpen = false;
+          })
+
+        Column() {
+          Text(this.pickTitle)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#000000')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 12, left: 16, right: 16 })
+
+          Divider().strokeWidth(1).color('#E0E0E0')
+
+          ForEach(this.pickItems, (item: string, index: number) => {
+            Text(item)
+              .width('100%')
+              .height(40)
+              .fontSize(15)
+              .fontColor('#333333')
+              .textAlign(TextAlign.Center)
+              .onClick(() => {
+                this.applyPick(index);
+              })
+            if (index < this.pickItems.length - 1) {
+              Divider().strokeWidth(1).color('#E0E0E0')
+            }
+          }, (item: string, index: number) => item + index.toString())
+        }
+        .width(Math.min(200, this.viewW))
+        .backgroundColor(Color.White)
+        .borderRadius(12)
+        .clip(true)
+        .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
+        .position({ x: this.pickX, y: this.pickY })
       }
 
     }

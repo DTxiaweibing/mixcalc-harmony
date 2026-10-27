@@ -58,6 +58,15 @@ const ZH: Record<string, string> = {
   'lang.zh': '简体中文',
   'lang.en': 'English',
   'switch.title': '换料比例',
+  'water.title': '选择水百分比',
+  'ferment.title': '发酵料计算设置',
+  'ferment.inWater': '参与算水',
+  'ferment.exWater': '不参与算水',
+  'ferment.inAvg': '参与算料',
+  'ferment.exAvg': '不参与算料',
+  'water.saved': '水百分比已设置为%d%%',
+  'ferment.status': '当前设置：%s',
+  'ferment.nochange': '设置未改变',
 };
 
 const EN: Record<string, string> = {
@@ -120,6 +129,15 @@ const EN: Record<string, string> = {
   'lang.zh': '简体中文',
   'lang.en': 'English',
   'switch.title': '换料比例',
+  'water.title': '选择水百分比',
+  'ferment.title': '发酵料计算设置',
+  'ferment.inWater': '参与算水',
+  'ferment.exWater': '不参与算水',
+  'ferment.inAvg': '参与算料',
+  'ferment.exAvg': '不参与算料',
+  'water.saved': '水百分比已设置为%d%%',
+  'ferment.status': '当前设置：%s',
+  'ferment.nochange': '设置未改变',
 };
 
 export function t(lang: string, key: string): string {
