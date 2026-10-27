@@ -378,6 +378,12 @@ struct Index {
       this.toast(t(this.lang, 'ferment.nochange'));
       return;
     }
+    if (which === 2 || which === 3) {
+      const rows: FeedData[] = this.currentBatch().rows;
+      for (let i = 0; i < rows.length; i++) {
+        rows[i].isAverageManuallyModified = false;
+      }
+    }
     this.saveAll();
     const status: string = (this.fermentWater ? t(this.lang, 'ferment.inWater') : t(this.lang, 'ferment.exWater'))
       + '，' + (this.fermentAvg ? t(this.lang, 'ferment.inAvg') : t(this.lang, 'ferment.exAvg'));
