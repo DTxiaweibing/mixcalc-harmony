@@ -33,7 +33,7 @@ struct CellEditorDialog {
       Divider().strokeWidth(1).color('#E0E0E0')
 
       TextInput({ text: this.input })
-        .type(this.isNumber ? InputType.Number : InputType.Normal)
+        .type(this.isNumber ? InputType.NUMBER_DECIMAL : InputType.Normal)
         .fontSize(16)
         .textAlign(TextAlign.Center)
         .height(44)
@@ -215,6 +215,10 @@ export struct MixCalcTable {
   @State pickItems: string[] = [];
   private pickKind: string = '';
   private suppressClickUntil: number = 0;
+  private downAt: number = 0;
+  private downX: number = 0;
+  private downY: number = 0;
+  private downMoved: boolean = false;
 
   visibleMask: boolean[] = [];
   fixedMask: boolean[] = [];
@@ -374,18 +378,32 @@ export struct MixCalcTable {
     return -1;
   }
 
+  private formatNumber(value: number): string {
+    if (value === 0) {
+      return '';
+    }
+    if (value === Math.floor(value)) {
+      return Math.floor(value).toString();
+    }
+    return value.toFixed(2);
+  }
+
   private cellText(row: FeedData, column: number): string {
     switch (column) {
       case 1: return row.shedNumber;
       case 2: return row.shedCount === 0 ? '' : Math.round(row.shedCount).toString();
-      case 3: return row.average > 0 ? row.average.toFixed(2) : '';
-      case 4: return row.fermented > 0 ? row.fermented.toFixed(2) : '';
-      case 5: return row.powder > 0 ? row.powder.toFixed(2) : '';
-      case 6: return row.feed03 > 0 ? row.feed03.toFixed(2) : '';
-      case 7: return row.feed05 > 0 ? row.feed05.toFixed(2) : '';
-      case 8: return row.feed10 > 0 ? row.feed10.toFixed(2) : '';
-      case 9: return row.water > 0 ? row.water.toFixed(2) : '';
-      case 10: return row.weighed > 0 ? row.weighed.toFixed(2) : '';
+      case 3: return this.formatNumber(row.average);
+      case 4: return this.formatNumber(row.fermented);
+      case 5: return this.formatNumber(row.powder);
+      case 6: return this.formatNumber(row.feed03);
+      case 7: return this.formatNumber(row.feed05);
+      case 8: return this.formatNumber(row.feed10);
+      case 9: return this.formatNumber(row.water);
+      case 10:
+        if (row.shedCount > 0 && row.weighed > 0) {
+          return this.formatNumber(row.weighed) + '×' + row.shedCount.toString();
+        }
+        return '';
       default: return '';
     }
   }
@@ -797,7 +815,8 @@ export struct MixCalcTable {
   }  private showWaterPicker(col: number): void {
     const items: string[] = [];
     for (let pct = 10; pct <= 40; pct += 5) {
-      items.push(t(this.lang, 'col.water') + pct.toString() + '%');
+      const label: string = t(this.lang, 'col.water') + pct.toString() + '%';
+      items.push(pct === this.waterPercentage ? label + ' ✓' : label);
     }
     this.pickKind = 'water';
     this.pickTitle = t(this.lang, 'water.title');
@@ -1063,37 +1082,56 @@ export struct MixCalcTable {
       .backgroundColor('#E8F5E9')
       .clip(true)
 
-      Canvas(this.ctx)
-        .layoutWeight(1)
-        .width('100%')
-        .onReady(() => {
-          this.viewW = this.ctx.width;
-          this.viewH = this.ctx.height;
-          this.drawBody();
-        })
-        .onAreaChange((_oldValue: Area, newValue: Area) => {
-          this.viewW = Number(newValue.width);
-          this.viewH = Number(newValue.height);
-          this.drawBody();
-        })
-        .gesture(
-          LongPressGesture()
-            .onAction((event: GestureEvent) => {
-              if (event.fingerList.length > 0) {
-                this.handleFeedLongPress(event.fingerList[0].localX, event.fingerList[0].localY);
+      Stack() {
+        Canvas(this.ctx)
+          .width('100%')
+          .height('100%')
+          .onReady(() => {
+            this.viewW = this.ctx.width;
+            this.viewH = this.ctx.height;
+            this.drawBody();
+          })
+          .onAreaChange((_oldValue: Area, newValue: Area) => {
+            this.viewW = Number(newValue.width);
+            this.viewH = Number(newValue.height);
+            this.drawBody();
+          })
+
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor('#00000000')
+          .onTouch((event: TouchEvent) => {
+            if (event.touches.length === 0) {
+              return;
+            }
+            if (event.type === TouchType.Down) {
+              this.downAt = Date.now();
+              this.downX = event.touches[0].x;
+              this.downY = event.touches[0].y;
+              this.downMoved = false;
+            } else if (event.type === TouchType.Move) {
+              if (Math.abs(event.touches[0].x - this.downX) > 8
+                || Math.abs(event.touches[0].y - this.downY) > 8) {
+                this.downMoved = true;
               }
-            })
-        )
-        .onClick((event: ClickEvent) => {
-          if (Date.now() < this.suppressClickUntil) {
-            return;
-          }
-          const row: number = Math.floor((event.y + this.offsetY) / ROW_H);
-          if (row < 0 || row >= this.rows.length) {
-            return;
-          }
-          this.openEditor(row, this.columnAt(event.x));
-        })
+            } else if (event.type === TouchType.Up) {
+              if (this.downMoved) {
+                return;
+              }
+              if (Date.now() - this.downAt >= 300) {
+                this.handleFeedLongPress(this.downX, this.downY);
+              } else {
+                const row: number = Math.floor((this.downY + this.offsetY) / ROW_H);
+                if (row >= 0 && row < this.rows.length) {
+                  this.openEditor(row, this.columnAt(this.downX));
+                }
+              }
+            }
+          })
+      }
+      .layoutWeight(1)
+      .width('100%')
 
       Stack({ alignContent: Alignment.TopStart }) {
         Row() {
