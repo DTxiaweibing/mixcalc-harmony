@@ -988,7 +988,7 @@ export struct MixCalcTable {
               this.headerCell(col)
             }, (col: number) => 'h' + col.toString() + '_' + this.version.toString())
           }
-          .translate({ x: this.frozenWidth() - this.offsetX })
+          .position({ x: this.frozenWidth() - this.offsetX, y: 0 })
 
           Row() {
             ForEach(this.fixedIndices(), (col: number) => {
@@ -1067,7 +1067,7 @@ export struct MixCalcTable {
               this.footerCell(col)
             }, (col: number) => 'f' + col.toString() + '_' + this.version.toString())
           }
-          .translate({ x: this.frozenWidth() - this.offsetX })
+          .position({ x: this.frozenWidth() - this.offsetX, y: 0 })
 
           Row() {
             ForEach(this.fixedIndices(), (col: number) => {
