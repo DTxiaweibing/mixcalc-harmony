@@ -161,8 +161,8 @@ export struct MixCalcTable {
   onWaterChange: (percent: number) => void = () => {};
   onFermentChange: (which: number) => void = () => {};
 
-  visibleMask: boolean[] = [];
-  fixedMask: boolean[] = [];
+  @Prop visibleMask: boolean[] = [];
+  @Prop fixedMask: boolean[] = [];
 
   @Prop lang: string = 'zh';
   @Prop waterPercentage: number = 20;
