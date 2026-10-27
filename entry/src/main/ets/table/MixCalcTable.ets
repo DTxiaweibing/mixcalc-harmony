@@ -1,5 +1,6 @@
 import { FeedData } from '../model/FeedData';
 import { t } from '../common/Strings';
+import { promptAction } from '@kit.ArkUI';
 
 const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
 const HEADS: string[] = ['序号', '棚号', '棚数', '平均', '发酵料', '粉料', '0.3料', '0.5料', '1.0料', '水', '称料'];
@@ -213,6 +214,7 @@ export struct MixCalcTable {
   @State pickTitle: string = '';
   @State pickItems: string[] = [];
   private pickKind: string = '';
+  private suppressClickUntil: number = 0;
 
   visibleMask: boolean[] = [];
   fixedMask: boolean[] = [];
@@ -553,7 +555,8 @@ export struct MixCalcTable {
       case 8: value = data.feed10; break;
       default: break;
     }
-    return value === 0 ? '' : value.toFixed(2);
+    const rounded: number = Math.round(value * 100) / 100;
+    return rounded === 0 ? '' : rounded.toString();
   }
 
   private clearRowData(row: FeedData, clearShedNumber: boolean): void {
@@ -738,6 +741,15 @@ export struct MixCalcTable {
       return last;
     }
     return -1;
+  }
+
+  /** 该料格是不是“换料目标格”（目标按料下标 0~3 计算，列号需减 5）。 */
+  private isSwitchTargetCell(data: FeedData, column: number): boolean {
+    const nf: number = column - 5;
+    if (nf < 0 || nf > 3) {
+      return false;
+    }
+    return this.switchTargetIndex(data) === nf;
   }
 
   private handleFeedLongPress(x: number, y: number): void {
@@ -1073,6 +1085,9 @@ export struct MixCalcTable {
             })
         )
         .onClick((event: ClickEvent) => {
+          if (Date.now() < this.suppressClickUntil) {
+            return;
+          }
           const row: number = Math.floor((event.y + this.offsetY) / ROW_H);
           if (row < 0 || row >= this.rows.length) {
             return;

@@ -3,6 +3,7 @@ import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
 import { promptAction, router, display } from '@kit.ArkUI';
 import { Batch } from '../model/Batch';
+import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
 import { t } from '../common/Strings';
 import { i18n } from '@kit.LocalizationKit';
@@ -32,6 +33,7 @@ struct Index {
   @State activeBatch: number = 0;
   @State ready: boolean = false;
   @State tableGen: number = 0;
+  @State errorText: string = '';
   @State menuOpen: boolean = false;
   @State batchMenuOpen: boolean = false;
   @State menuWidth: number = 140;
@@ -108,6 +110,33 @@ struct Index {
 
   private currentBatch(): Batch {
     return this.batches[this.activeBatch];
+  }
+
+  private computeError(): string {
+    let sumIngredients: number = 0;
+    let sumWeighed: number = 0;
+    let hasData: boolean = false;
+    const rows: FeedData[] = this.currentBatch().rows;
+    for (let i = 0; i < rows.length; i++) {
+      const r: FeedData = rows[i];
+      sumIngredients += r.fermented + r.powder + r.feed03 + r.feed05 + r.feed10 + r.water;
+      if (r.shedCount > 0 && r.weighed > 0) {
+        sumWeighed += Math.round(r.weighed * 100) / 100 * r.shedCount;
+      }
+      if (r.fermented !== 0 || r.powder !== 0 || r.feed03 !== 0 || r.feed05 !== 0
+        || r.feed10 !== 0 || r.water !== 0) {
+        hasData = true;
+      }
+    }
+    const err: number = sumIngredients - sumWeighed;
+    if (!hasData || Math.abs(err) < 0.005) {
+      return '';
+    }
+    let text: string = (err >= 0 ? '+' : '') + err.toFixed(2);
+    if (text.length > 5) {
+      text = text.substring(0, 5);
+    }
+    return text;
   }
 
   private saveAll(): void {
@@ -405,6 +434,12 @@ struct Index {
             },
             onColumnAction: (action: string, index: number) => {
               this.handleColumnAction(action, index);
+            },
+            onWaterChange: (percent: number) => {
+              this.setWaterPercentage(percent);
+            },
+            onFermentChange: (which: number) => {
+              this.setFermentOption(which);
             }
           })
             .layoutWeight(1)
