@@ -57,6 +57,7 @@ const ZH: Record<string, string> = {
   'lang.system': '跟随系统',
   'lang.zh': '简体中文',
   'lang.en': 'English',
+  'switch.title': '换料比例',
 };
 
 const EN: Record<string, string> = {
@@ -118,6 +119,7 @@ const EN: Record<string, string> = {
   'lang.system': 'Follow system',
   'lang.zh': '简体中文',
   'lang.en': 'English',
+  'switch.title': '换料比例',
 };
 
 export function t(lang: string, key: string): string {

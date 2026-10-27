@@ -256,6 +256,12 @@ export struct MixCalcTable {
     customStyle: true
   });
 
+  @State ratioOpen: boolean = false;
+  @State ratioX: number = 0;
+  @State ratioY: number = 0;
+  @State ratioCurrent: number = 0;
+  private ratioRow: number = -1;
+
   @State colMenuOpen: boolean = false;
   @State colMenuX: number = 0;
   @State colMenuTitle: string = '';
@@ -492,6 +498,11 @@ export struct MixCalcTable {
     if (column >= 4 && column <= 8 && data.shedCount <= 0) {
       return '#F0F0F0';
     }
+    // 换料中的目标格浅绿高亮（安卓 STATE_HIGHLIGHT）
+    if (column >= 5 && column <= 8 && data.shedCount > 0 && data.switchRatio > 0
+      && this.switchTargetIndex(data) === column) {
+      return '#F0F8F0';
+    }
     return '#FFFFFF';
   }
 
@@ -700,7 +711,69 @@ export struct MixCalcTable {
     return 0;
   }
 
-  private showColumnMenu(index: number): void {
+
+  /** 换料目标列：一格数据时取它的“大一号”，两格时取较大的那档。 */
+  private switchTargetIndex(data: FeedData): number {
+    let count: number = 0;
+    let last: number = -1;
+    for (let i = 0; i < 4; i++) {
+      if (data.getNonFermentedValue(i) > 0) {
+        count++;
+        last = i;
+      }
+    }
+    if (count === 1) {
+      return last > 0 && last < 3 ? last + 1 : -1;
+    }
+    if (count === 2) {
+      return last;
+    }
+    return -1;
+  }
+
+  private handleFeedLongPress(x: number, y: number): void {
+    const row: number = Math.floor((y + this.offsetY) / ROW_H);
+    if (row < 0 || row >= this.rows.length) {
+      return;
+    }
+    const col: number = this.columnAt(x);
+    if (col < 5 || col > 8) {
+      return;
+    }
+    const data: FeedData = this.rows[row];
+    if (!this.isCellEnabled(data, col)) {
+      return;
+    }
+    if (this.switchTargetIndex(data) !== col) {
+      return;
+    }
+    this.ratioRow = row;
+    this.ratioCurrent = data.switchRatio;
+    const maxX: number = Math.max(0, this.viewW - 160);
+    this.ratioX = Math.max(0, Math.min(this.columnLeft(col), maxX));
+    this.ratioY = (row + 1) * ROW_H - this.offsetY;
+    this.ratioOpen = true;
+  }
+
+  private selectRatio(ratio: number): void {
+    if (this.ratioRow < 0) {
+      return;
+    }
+    const data: FeedData = this.rows[this.ratioRow];
+    data.switchRatio = ratio;
+    const avg: number = data.average;
+    if (!data.isAverageManuallyModified && avg > 0) {
+      data.average = avg;
+      data.isAverageManuallyModified = true;
+    }
+    if (this.ratioRow !== 0) {
+      data.recalculateDerivedOnly(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+    }
+    this.recomputeFirstRow();
+    this.ratioOpen = false;
+    this.drawBody();
+    this.onChanged();
+  }  private showColumnMenu(index: number): void {
     if (index === 0) {
       return;
     }
@@ -929,6 +1002,14 @@ export struct MixCalcTable {
           this.viewH = Number(newValue.height);
           this.drawBody();
         })
+        .gesture(
+          LongPressGesture()
+            .onAction((event: GestureEvent) => {
+              if (event.fingerList.length > 0) {
+                this.handleFeedLongPress(event.fingerList[0].localX, event.fingerList[0].localY);
+              }
+            })
+        )
         .onClick((event: ClickEvent) => {
           const row: number = Math.floor((event.y + this.offsetY) / ROW_H);
           if (row < 0 || row >= this.rows.length) {
@@ -1032,6 +1113,57 @@ export struct MixCalcTable {
         .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
         .position({ x: this.colMenuX, y: HEAD_H })
       }
+      if (this.ratioOpen) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor('#00000000')
+          .onClick(() => {
+            this.ratioOpen = false;
+          })
+
+        Column() {
+          Text(t(this.lang, 'switch.title'))
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#000000')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 12, left: 16, right: 16 })
+
+          Divider().strokeWidth(1).color('#E0E0E0')
+
+          ForEach([10, 20, 30, 40, 50, 60, 70, 80, 90], (p: number) => {
+            Row() {
+              Text(p.toString() + '%')
+                .layoutWeight(1)
+                .fontSize(15)
+                .fontColor('#333333')
+                .textAlign(TextAlign.Center)
+              Text(Math.abs(this.ratioCurrent - p / 100) < 0.0001 ? '✓' : '')
+                .width(24)
+                .fontSize(16)
+                .fontColor('#2E7D32')
+                .textAlign(TextAlign.Center)
+            }
+            .width('100%')
+            .height(40)
+            .padding({ left: 16, right: 16 })
+            .onClick(() => {
+              this.selectRatio(p / 100);
+            })
+            if (p < 90) {
+              Divider().strokeWidth(1).color('#E0E0E0')
+            }
+          }, (p: number) => 'r' + p.toString())
+        }
+        .width(Math.min(160, this.viewW))
+        .backgroundColor(Color.White)
+        .borderRadius(12)
+        .clip(true)
+        .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
+        .position({ x: this.ratioX, y: this.ratioY })
+      }
+
     }
     .width('100%')
     .height('100%')
