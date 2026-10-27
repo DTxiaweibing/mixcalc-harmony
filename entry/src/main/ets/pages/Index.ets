@@ -102,6 +102,7 @@ struct Index {
     }
     this.syncBatchSettings();
     this.ready = true;
+    this.errorText = this.computeError();
     try {
       const info = display.getDefaultDisplaySync();
       const widthVp = this.getUIContext().px2vp(info.width);
@@ -154,6 +155,7 @@ struct Index {
     if (this.store === null || this.batches.length === 0) {
       return;
     }
+    this.errorText = this.computeError();
     BatchStore.save(this.store, this.batches, this.activeBatch);
   }
 
@@ -180,15 +182,17 @@ struct Index {
 
   @Builder
   settingCell(label: string, selected: boolean, action: () => void) {
-    Text(label)
-      .layoutWeight(1)
-      .height(28)
-      .fontSize(12)
-      .fontColor(selected ? Color.White : '#333333')
-      .textAlign(TextAlign.Center)
-      .backgroundColor(selected ? '#2D8C42' : '#FFFFFF')
-      .border({ width: 0.5, color: '#CCCCCC' })
-      .onClick(action)
+    Row() {
+      Text(label)
+        .fontSize(12)
+        .fontColor(selected ? Color.White : "#333333")
+        .textAlign(TextAlign.Center)
+    }
+    .layoutWeight(1)
+    .height(28)
+    .backgroundColor(selected ? "#2D8C42" : "#FFFFFF")
+    .border({ width: 0.5, color: "#CCCCCC" })
+    .onClick(action)
   }
 
   private colVisible(col: number): boolean {
@@ -406,7 +410,7 @@ struct Index {
             .fontSize(22)
             .fontColor(Color.White)
             .width(44)
-            .height(40)
+            .width('20%')
             .textAlign(TextAlign.Center)
             .onClick(() => {
               this.menuOpen = !this.menuOpen;
@@ -419,8 +423,12 @@ struct Index {
             .layoutWeight(1)
             .textAlign(TextAlign.Center)
 
-          Text('')
-            .width(44)
+          Text(this.errorText)
+            .fontSize(16)
+            .fontColor(Color.White)
+            .width('20%')
+            .height(40)
+            .textAlign(TextAlign.Center)
         }
         .width('100%')
         .height(40)
