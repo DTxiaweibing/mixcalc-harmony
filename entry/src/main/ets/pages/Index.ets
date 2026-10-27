@@ -191,6 +191,8 @@ struct Index {
     ctx.terminateSelf();
   }
 
+
+
   private syncBatchSettings(): void {
     const batch: Batch = this.currentBatch();
     this.waterPct = batch.waterPercentage;
