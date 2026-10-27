@@ -420,6 +420,7 @@ struct Index {
         .backgroundColor($r('app.color.title_bar_bg'))
 
         if (this.ready) {
+          ForEach([this.tableGen], (gen: number) => {
           MixCalcTable({
             rows: this.currentBatch().rows,
             waterPercentage: this.waterPct,
@@ -446,6 +447,7 @@ struct Index {
           })
             .layoutWeight(1)
             .width('100%')
+          }, (gen: number) => 'tbl' + gen.toString())
         }
       }
       .width('100%')
