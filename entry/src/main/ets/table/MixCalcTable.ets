@@ -1,14 +1,13 @@
 import { FeedData } from '../model/FeedData';
 import { t } from '../common/Strings';
-import { promptAction } from '@kit.ArkUI';
 
 const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
-const HEADS: string[] = ['序号', '棚号', '棚数', '平均', '发酵料', '粉料', '0.3料', '0.5料', '1.0料', '水', '称料'];
 const HEAD_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
 const WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
 const ROW_H: number = 40;
 const HEAD_H: number = 40;
 const FOOT_H: number = 40;
+
 @CustomDialog
 struct CellEditorDialog {
   controller?: CustomDialogController;
@@ -153,72 +152,14 @@ struct ConfirmDialog {
   }
 }
 
-@CustomDialog
-struct ColumnMenuDialog {
-  controller?: CustomDialogController;
-  title: string = '';
-  items: string[] = [];
-  onSelect: (index: number) => void = () => {};
-
-  build() {
-    Column() {
-      Text(this.title)
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#000000')
-        .textAlign(TextAlign.Center)
-        .padding({ top: 16, bottom: 12, left: 16, right: 16 })
-
-      Divider().strokeWidth(1).color('#E0E0E0')
-
-      ForEach(this.items, (item: string, index: number) => {
-        Button(item)
-          .type(ButtonType.Normal)
-          .width('100%')
-          .height(40)
-          .borderRadius(0)
-          .backgroundColor(Color.Transparent)
-          .fontSize(15)
-          .fontColor('#333333')
-          .onClick(() => {
-            this.controller?.close();
-            this.onSelect(index);
-          })
-        if (index < this.items.length - 1) {
-          Divider().strokeWidth(1).color('#E0E0E0')
-        }
-      }, (item: string, index: number) => item + index.toString())
-    }
-    .width(200)
-    .backgroundColor(Color.White)
-    .borderRadius(12)
-    .clip(true)
-  }
-}
-
 @Component
 export struct MixCalcTable {
-  private settings: RenderingContextSettings = new RenderingContextSettings(true);
-  private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
-
   rows: FeedData[] = [];
   onChanged: () => void = () => {};
   onHelp: () => void = () => {};
   onColumnAction: (action: string, index: number) => void = () => {};
   onWaterChange: (percent: number) => void = () => {};
   onFermentChange: (which: number) => void = () => {};
-
-  @State pickOpen: boolean = false;
-  @State pickX: number = 0;
-  @State pickY: number = 0;
-  @State pickTitle: string = '';
-  @State pickItems: string[] = [];
-  private pickKind: string = '';
-  private suppressClickUntil: number = 0;
-  private downAt: number = 0;
-  private downX: number = 0;
-  private downY: number = 0;
-  private downMoved: boolean = false;
 
   visibleMask: boolean[] = [];
   fixedMask: boolean[] = [];
@@ -232,6 +173,25 @@ export struct MixCalcTable {
   @State offsetY: number = 0;
   @State viewW: number = 0;
   @State viewH: number = 0;
+  @State version: number = 0;
+
+  @State colMenuOpen: boolean = false;
+  @State colMenuX: number = 0;
+  @State colMenuTitle: string = '';
+  @State colMenuItems: string[] = [];
+  private colMenuIndex: number = -1;
+
+  @State pickOpen: boolean = false;
+  @State pickX: number = 0;
+  @State pickTitle: string = '';
+  @State pickItems: string[] = [];
+  private pickKind: string = '';
+
+  @State ratioOpen: boolean = false;
+  @State ratioX: number = 0;
+  @State ratioY: number = 0;
+  @State ratioCurrent: number = 0;
+  private ratioRow: number = -1;
 
   private lastPanX: number = 0;
   private lastPanY: number = 0;
@@ -239,7 +199,6 @@ export struct MixCalcTable {
 
   private editRow: number = -1;
   private editCol: number = -1;
-
   private editorTitle: string = '';
   private editorValue: string = '';
   private editorIsNumber: boolean = false;
@@ -271,39 +230,19 @@ export struct MixCalcTable {
     customStyle: true
   });
 
-  @State ratioOpen: boolean = false;
-  @State ratioX: number = 0;
-  @State ratioY: number = 0;
-  @State ratioCurrent: number = 0;
-  private ratioRow: number = -1;
-
-  @State colMenuOpen: boolean = false;
-  @State colMenuX: number = 0;
-  @State colMenuTitle: string = '';
-  @State colMenuItems: string[] = [];
-  private colMenuIndex: number = -1;
-
-
-  private headLabel(col: number): string {
-    return t(this.lang, HEAD_KEYS[col]);
-  }  private isVisible(index: number): boolean {
+  // ===== 列状态 =====
+  private isVisible(index: number): boolean {
     if (index === 0) {
       return true;
     }
-    if (this.visibleMask.length > index) {
-      return this.visibleMask[index];
-    }
-    return true;
+    return this.visibleMask.length > index ? this.visibleMask[index] : true;
   }
 
   private isFixed(index: number): boolean {
     if (index === 0) {
       return true;
     }
-    if (this.fixedMask.length > index) {
-      return this.fixedMask[index];
-    }
-    return false;
+    return this.fixedMask.length > index ? this.fixedMask[index] : false;
   }
 
   private fixedIndices(): number[] {
@@ -335,14 +274,21 @@ export struct MixCalcTable {
     return w;
   }
 
-  private totalWidth(): number {
+  private normalWidth(): number {
     let w: number = 0;
-    for (let i = 0; i < WIDTHS.length; i++) {
-      if (this.isVisible(i)) {
-        w += WIDTHS[i];
-      }
+    const normal: number[] = this.normalIndices();
+    for (let i = 0; i < normal.length; i++) {
+      w += WIDTHS[normal[i]];
     }
     return w;
+  }
+
+  private totalWidth(): number {
+    return this.frozenWidth() + this.normalWidth();
+  }
+
+  private bodyHeight(): number {
+    return this.rows.length * ROW_H;
   }
 
   private maxOffsetX(): number {
@@ -350,7 +296,7 @@ export struct MixCalcTable {
   }
 
   private maxOffsetY(): number {
-    return Math.max(0, this.rows.length * ROW_H - this.viewH);
+    return Math.max(0, this.bodyHeight() - this.viewH);
   }
 
   private clampOffsets(): void {
@@ -358,24 +304,32 @@ export struct MixCalcTable {
     this.offsetY = Math.min(Math.max(0, this.offsetY), this.maxOffsetY());
   }
 
-  private columnAt(x: number): number {
+  private columnLeft(index: number): number {
     const fixed: number[] = this.fixedIndices();
-    let acc: number = 0;
+    let x: number = 0;
     for (let i = 0; i < fixed.length; i++) {
-      if (x >= acc && x < acc + WIDTHS[fixed[i]]) {
-        return fixed[i];
+      if (fixed[i] === index) {
+        return x;
       }
-      acc += WIDTHS[fixed[i]];
+      x += WIDTHS[fixed[i]];
     }
+    let nx: number = 0;
     const normal: number[] = this.normalIndices();
     for (let i = 0; i < normal.length; i++) {
-      const cx: number = acc - this.offsetX;
-      if (x >= cx && x < cx + WIDTHS[normal[i]]) {
-        return normal[i];
+      if (normal[i] === index) {
+        return this.frozenWidth() + nx - this.offsetX;
       }
-      acc += WIDTHS[normal[i]];
+      nx += WIDTHS[normal[i]];
     }
-    return -1;
+    return 0;
+  }
+
+  // ===== 文案与数值 =====
+  private headLabel(col: number): string {
+    if (col === 9) {
+      return t(this.lang, 'col.water') + this.waterPercentage.toString() + '%';
+    }
+    return t(this.lang, HEAD_KEYS[col]);
   }
 
   private formatNumber(value: number): string {
@@ -388,8 +342,9 @@ export struct MixCalcTable {
     return value.toFixed(2);
   }
 
-  private cellText(row: FeedData, column: number): string {
+  private cellText(row: FeedData, column: number, rowIndex: number): string {
     switch (column) {
+      case 0: return (rowIndex + 1).toString();
       case 1: return row.shedNumber;
       case 2: return row.shedCount === 0 ? '' : Math.round(row.shedCount).toString();
       case 3: return this.formatNumber(row.average);
@@ -418,89 +373,10 @@ export struct MixCalcTable {
     return '#000000';
   }
 
-  private sumColumn(column: number): number {
-    let s: number = 0;
-    for (let i = 0; i < this.rows.length; i++) {
-      const r: FeedData = this.rows[i];
-      switch (column) {
-        case 2: s += r.shedCount; break;
-        case 4: s += r.fermented; break;
-        case 5: s += r.powder; break;
-        case 6: s += r.feed03; break;
-        case 7: s += r.feed05; break;
-        case 8: s += r.feed10; break;
-        case 9: s += r.water; break;
-        default: break;
-      }
-    }
-    return s;
+  private isWarningCell(data: FeedData, column: number, rowIndex: number): boolean {
+    return column === 2 && rowIndex === 0 && data.shedCountBase > 0 && data.shedCount <= 0;
   }
 
-  private filledRows(): number {
-    let n: number = 0;
-    for (let i = 0; i < this.rows.length; i++) {
-      if (this.rows[i].shedCount > 0) {
-        n++;
-      }
-    }
-    return n;
-  }
-
-  private weightedAverage(): number {
-    let sheds: number = 0;
-    let total: number = 0;
-    for (let i = 0; i < this.rows.length; i++) {
-      const r: FeedData = this.rows[i];
-      if (r.average > 0 && r.shedCount > 0) {
-        sheds += r.shedCount;
-        total += r.average * r.shedCount;
-      }
-    }
-    return sheds > 0 ? total / sheds : 0;
-  }
-
-  private formatSum(value: number): string {
-    if (value === 0) {
-      return '0';
-    }
-    if (value === Math.floor(value)) {
-      return Math.floor(value).toString();
-    }
-    return value.toFixed(2);
-  }
-
-  private footerText(c: number): string {
-    switch (c) {
-      case 0: return this.filledRows().toString() + '/' + this.rows.length.toString();
-      case 1: return t(this.lang, 'footer.help');
-      case 3: return this.formatSum(this.weightedAverage());
-      case 10: return t(this.lang, 'footer.reset');
-      default: return this.formatSum(this.sumColumn(c));
-    }
-  }
-
-  private footerCellBg(c: number): string {
-    if (c === 1) {
-      return '#000042';
-    }
-    if (c === 10) {
-      return '#960018';
-    }
-    return '#EAF3EC';
-  }
-
-  private footerColor(c: number): string {
-    if (c === 1 || c === 10) {
-      return '#FFFFFF';
-    }
-    return '#1F6B30';
-  }
-
-  private isEditableColumn(column: number): boolean {
-    return column >= 1 && column <= 8;
-  }
-
-  /** 与安卓 isCellEnabled 一致：棚号/棚数恒可编辑；平均看能否手改；料格要有棚数。 */
   private isCellEnabled(data: FeedData, column: number): boolean {
     if (column === 1 || column === 2) {
       return true;
@@ -514,28 +390,21 @@ export struct MixCalcTable {
     return false;
   }
 
-  /** 第一行棚数被后续行扣成 ≤0 时用警告色（安卓 STATE_WARNING）。 */
-  private isWarningCell(data: FeedData, column: number, rowIndex: number): boolean {
-    return column === 2 && rowIndex === 0 && data.shedCountBase > 0 && data.shedCount <= 0;
-  }
-
-  private cellFillColor(data: FeedData, column: number, rowIndex: number): string {
+  private cellFill(data: FeedData, column: number, rowIndex: number): string {
     if (this.isWarningCell(data, column, rowIndex)) {
       return '#FFC64B';
     }
-    // 平均列永不置灰（与安卓一致），只有料格按棚数禁用
     if (column >= 4 && column <= 8 && data.shedCount <= 0) {
       return '#F0F0F0';
     }
-    // 换料中的目标格浅绿高亮（安卓 STATE_HIGHLIGHT）
     if (column >= 5 && column <= 8 && data.shedCount > 0 && data.switchRatio > 0
-      && this.switchTargetIndex(data) === column) {
+      && this.isSwitchTargetCell(data, column)) {
       return '#F0F8F0';
     }
     return '#FFFFFF';
   }
 
-  private cellStrokeColor(data: FeedData, column: number, rowIndex: number): string {
+  private cellBorderColor(data: FeedData, column: number, rowIndex: number): string {
     if (this.isWarningCell(data, column, rowIndex)) {
       return '#FF0000';
     }
@@ -543,6 +412,37 @@ export struct MixCalcTable {
       return '#CCCCCC';
     }
     return '#000000';
+  }
+
+  private switchTargetIndex(data: FeedData): number {
+    let count: number = 0;
+    let last: number = -1;
+    for (let i = 0; i < 4; i++) {
+      if (data.getNonFermentedValue(i) > 0) {
+        count++;
+        last = i;
+      }
+    }
+    if (count === 1) {
+      return last >= 0 && last < 3 ? last + 1 : -1;
+    }
+    if (count === 2) {
+      return last;
+    }
+    return -1;
+  }
+
+  private isSwitchTargetCell(data: FeedData, column: number): boolean {
+    const nf: number = column - 5;
+    if (nf < 0 || nf > 3) {
+      return false;
+    }
+    return this.switchTargetIndex(data) === nf;
+  }
+
+  // ===== 编辑 =====
+  private isEditableColumn(column: number): boolean {
+    return column >= 1 && column <= 8;
   }
 
   private nfIndexOf(column: number): number {
@@ -701,7 +601,7 @@ export struct MixCalcTable {
       row.updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
     }
     this.recomputeFirstRow();
-    this.drawBody();
+    this.version = this.version + 1;
     this.onChanged();
   }
 
@@ -712,7 +612,6 @@ export struct MixCalcTable {
     if (!this.isCellEnabled(this.rows[row], column)) {
       return;
     }
-    this.stopFling();
     this.editRow = row;
     this.editCol = column;
     this.editorTitle = this.headLabel(column) + ' · ' + t(this.lang, 'dlg.row').replace('%d', (row + 1).toString());
@@ -721,136 +620,8 @@ export struct MixCalcTable {
     this.editorController.open();
   }
 
-  private columnLeft(index: number): number {
-    const fixed: number[] = this.fixedIndices();
-    let x: number = 0;
-    for (let i = 0; i < fixed.length; i++) {
-      if (fixed[i] === index) {
-        return x;
-      }
-      x += WIDTHS[fixed[i]];
-    }
-    const normal: number[] = this.normalIndices();
-    x = 0;
-    for (let i = 0; i < normal.length; i++) {
-      if (normal[i] === index) {
-        return this.frozenWidth() + x - this.offsetX;
-      }
-      x += WIDTHS[normal[i]];
-    }
-    return 0;
-  }
-
-
-  /** 换料目标列：一格数据时取它的“大一号”，两格时取较大的那档。 */
-  private switchTargetIndex(data: FeedData): number {
-    let count: number = 0;
-    let last: number = -1;
-    for (let i = 0; i < 4; i++) {
-      if (data.getNonFermentedValue(i) > 0) {
-        count++;
-        last = i;
-      }
-    }
-    if (count === 1) {
-      return last > 0 && last < 3 ? last + 1 : -1;
-    }
-    if (count === 2) {
-      return last;
-    }
-    return -1;
-  }
-
-  /** 该料格是不是“换料目标格”（目标按料下标 0~3 计算，列号需减 5）。 */
-  private isSwitchTargetCell(data: FeedData, column: number): boolean {
-    const nf: number = column - 5;
-    if (nf < 0 || nf > 3) {
-      return false;
-    }
-    return this.switchTargetIndex(data) === nf;
-  }
-
-  private handleFeedLongPress(x: number, y: number): void {
-    const row: number = Math.floor((y + this.offsetY) / ROW_H);
-    if (row < 0 || row >= this.rows.length) {
-      return;
-    }
-    const col: number = this.columnAt(x);
-    if (col < 5 || col > 8) {
-      return;
-    }
-    const data: FeedData = this.rows[row];
-    if (!this.isCellEnabled(data, col)) {
-      return;
-    }
-    if (this.switchTargetIndex(data) !== col) {
-      return;
-    }
-    this.ratioRow = row;
-    this.ratioCurrent = data.switchRatio;
-    const maxX: number = Math.max(0, this.viewW - 160);
-    this.ratioX = Math.max(0, Math.min(this.columnLeft(col), maxX));
-    this.ratioY = (row + 1) * ROW_H - this.offsetY;
-    this.ratioOpen = true;
-  }
-
-  private selectRatio(ratio: number): void {
-    if (this.ratioRow < 0) {
-      return;
-    }
-    const data: FeedData = this.rows[this.ratioRow];
-    data.switchRatio = ratio;
-    const avg: number = data.average;
-    if (!data.isAverageManuallyModified && avg > 0) {
-      data.average = avg;
-      data.isAverageManuallyModified = true;
-    }
-    if (this.ratioRow !== 0) {
-      data.recalculateDerivedOnly(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
-    }
-    this.recomputeFirstRow();
-    this.ratioOpen = false;
-    this.drawBody();
-    this.onChanged();
-  }  private showWaterPicker(col: number): void {
-    const items: string[] = [];
-    for (let pct = 10; pct <= 40; pct += 5) {
-      const label: string = t(this.lang, 'col.water') + pct.toString() + '%';
-      items.push(pct === this.waterPercentage ? label + ' ✓' : label);
-    }
-    this.pickKind = 'water';
-    this.pickTitle = t(this.lang, 'water.title');
-    this.pickItems = items;
-    this.pickX = Math.max(0, Math.min(this.columnLeft(col), Math.max(0, this.viewW - 180)));
-    this.pickY = HEAD_H;
-    this.pickOpen = true;
-  }
-
-  private showFermentPicker(col: number): void {
-    const items: string[] = [
-      (this.fermentedInWater ? '● ' : '○ ') + t(this.lang, 'ferment.inWater'),
-      (this.fermentedInWater ? '○ ' : '● ') + t(this.lang, 'ferment.exWater'),
-      (this.fermentedInAverage ? '● ' : '○ ') + t(this.lang, 'ferment.inAvg'),
-      (this.fermentedInAverage ? '○ ' : '● ') + t(this.lang, 'ferment.exAvg')
-    ];
-    this.pickKind = 'ferment';
-    this.pickTitle = t(this.lang, 'ferment.title');
-    this.pickItems = items;
-    this.pickX = Math.max(0, Math.min(this.columnLeft(col), Math.max(0, this.viewW - 200)));
-    this.pickY = HEAD_H;
-    this.pickOpen = true;
-  }
-
-  private applyPick(index: number): void {
-    this.pickOpen = false;
-    if (this.pickKind === 'water') {
-      this.onWaterChange(10 + index * 5);
-    } else if (this.pickKind === 'ferment') {
-      this.onFermentChange(index);
-    }
-  }
-
-  private showColumnMenu(index: number): void {
+  // ===== 列操作菜单 =====
+  private showColumnMenu(index: number, x: number): void {
     if (index === 0) {
       return;
     }
@@ -864,8 +635,7 @@ export struct MixCalcTable {
       t(this.lang, 'col.showAll'),
       t(this.lang, 'col.unfixAllCols')
     ];
-    const maxX: number = Math.max(0, this.viewW - 200);
-    this.colMenuX = Math.max(0, Math.min(this.columnLeft(index), maxX));
+    this.colMenuX = Math.max(0, Math.min(x, Math.max(0, this.viewW - 200)));
     this.colMenuOpen = true;
   }
 
@@ -886,11 +656,153 @@ export struct MixCalcTable {
     }
   }
 
+  // ===== 水 / 发酵料 =====
+  private showWaterPicker(index: number, x: number): void {
+    const items: string[] = [];
+    for (let pct = 10; pct <= 40; pct += 5) {
+      const label: string = t(this.lang, 'col.water') + pct.toString() + '%';
+      items.push(pct === this.waterPercentage ? label + ' ✓' : label);
+    }
+    this.pickKind = 'water';
+    this.pickTitle = t(this.lang, 'water.title');
+    this.pickItems = items;
+    this.pickX = Math.max(0, Math.min(x, Math.max(0, this.viewW - 200)));
+    this.pickOpen = true;
+  }
+
+  private showFermentPicker(index: number, x: number): void {
+    this.pickKind = 'ferment';
+    this.pickTitle = t(this.lang, 'ferment.title');
+    this.pickItems = [
+      (this.fermentedInWater ? '● ' : '○ ') + t(this.lang, 'ferment.inWater'),
+      (this.fermentedInWater ? '○ ' : '● ') + t(this.lang, 'ferment.exWater'),
+      (this.fermentedInAverage ? '● ' : '○ ') + t(this.lang, 'ferment.inAvg'),
+      (this.fermentedInAverage ? '○ ' : '● ') + t(this.lang, 'ferment.exAvg')
+    ];
+    this.pickX = Math.max(0, Math.min(x, Math.max(0, this.viewW - 200)));
+    this.pickOpen = true;
+  }
+
+  private applyPick(index: number): void {
+    this.pickOpen = false;
+    if (this.pickKind === 'water') {
+      this.onWaterChange(10 + index * 5);
+    } else if (this.pickKind === 'ferment') {
+      this.onFermentChange(index);
+    }
+  }
+
+  // ===== 换料比例 =====
+  private openRatio(row: number, column: number): void {
+    const data: FeedData = this.rows[row];
+    if (!this.isCellEnabled(data, column) || column < 5 || column > 8) {
+      return;
+    }
+    if (!this.isSwitchTargetCell(data, column)) {
+      return;
+    }
+    this.ratioRow = row;
+    this.ratioCurrent = data.switchRatio;
+    const maxX: number = Math.max(0, this.viewW - 160);
+    this.ratioX = Math.max(0, Math.min(this.columnLeft(column), maxX));
+    this.ratioY = Math.min((row + 1) * ROW_H - this.offsetY, Math.max(0, this.viewH - 260));
+    this.ratioOpen = true;
+  }
+
+  private selectRatio(ratio: number): void {
+    if (this.ratioRow < 0) {
+      return;
+    }
+    const data: FeedData = this.rows[this.ratioRow];
+    data.switchRatio = ratio;
+    const avg: number = data.average;
+    if (!data.isAverageManuallyModified && avg > 0) {
+      data.average = avg;
+      data.isAverageManuallyModified = true;
+    }
+    if (this.ratioRow !== 0) {
+      data.recalculateDerivedOnly(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+    }
+    this.recomputeFirstRow();
+    this.ratioOpen = false;
+    this.version = this.version + 1;
+    this.onChanged();
+  }
+
+  // ===== 表尾与重置 =====
+  private sumColumn(column: number): number {
+    let s: number = 0;
+    for (let i = 0; i < this.rows.length; i++) {
+      const r: FeedData = this.rows[i];
+      switch (column) {
+        case 2: s += r.shedCount; break;
+        case 4: s += r.fermented; break;
+        case 5: s += r.powder; break;
+        case 6: s += r.feed03; break;
+        case 7: s += r.feed05; break;
+        case 8: s += r.feed10; break;
+        case 9: s += r.water; break;
+        default: break;
+      }
+    }
+    return s;
+  }
+
+  private filledRows(): number {
+    let n: number = 0;
+    for (let i = 0; i < this.rows.length; i++) {
+      if (this.rows[i].shedCount > 0) {
+        n++;
+      }
+    }
+    return n;
+  }
+
+  private weightedAverage(): number {
+    let sheds: number = 0;
+    let total: number = 0;
+    for (let i = 0; i < this.rows.length; i++) {
+      const r: FeedData = this.rows[i];
+      if (r.average > 0 && r.shedCount > 0) {
+        sheds += r.shedCount;
+        total += r.average * r.shedCount;
+      }
+    }
+    return sheds > 0 ? total / sheds : 0;
+  }
+
+  private footerText(c: number): string {
+    switch (c) {
+      case 0: return this.filledRows().toString() + '/' + this.rows.length.toString();
+      case 1: return t(this.lang, 'footer.help');
+      case 3: return this.formatNumber(Math.round(this.weightedAverage() * 100) / 100);
+      case 10: return t(this.lang, 'footer.reset');
+      default: return this.formatNumber(Math.round(this.sumColumn(c) * 100) / 100);
+    }
+  }
+
+  private footerCellBg(c: number): string {
+    if (c === 1) {
+      return '#000042';
+    }
+    if (c === 10) {
+      return '#960018';
+    }
+    return '#EAF3EC';
+  }
+
+  private footerColor(c: number): string {
+    if (c === 1 || c === 10) {
+      return '#FFFFFF';
+    }
+    return '#1F6B30';
+  }
+
   private confirmReset(): void {
     const filled: number = this.filledRows();
     this.resetMessage = filled > 0
-      ? '确定要重置所有数据吗？\n\n当前已有 ' + filled.toString() + ' 行数据，重置后将全部清空。'
-      : '确定要重置所有数据吗？\n\n当前没有数据需要重置。';
+      ? t(this.lang, 'dlg.resetHas').replace('%d', filled.toString())
+      : t(this.lang, 'dlg.resetNone');
     this.resetController.open();
   }
 
@@ -898,75 +810,11 @@ export struct MixCalcTable {
     for (let i = 0; i < this.rows.length; i++) {
       this.clearRowData(this.rows[i], true);
     }
-    this.drawBody();
+    this.version = this.version + 1;
     this.onChanged();
   }
 
-  private drawBody(): void {
-    if (this.viewW <= 0 || this.viewH <= 0) {
-      return;
-    }
-    this.ctx.clearRect(0, 0, this.viewW, this.viewH);
-    this.ctx.fillStyle = '#FFFFFF';
-    this.ctx.fillRect(0, 0, this.viewW, this.viewH);
-    this.clampOffsets();
-
-    const fixed: number[] = this.fixedIndices();
-    const normal: number[] = this.normalIndices();
-    const frozenW: number = this.frozenWidth();
-
-    for (let r = 0; r < this.rows.length; r++) {
-      const y: number = r * ROW_H - this.offsetY;
-      if (y + ROW_H < 0 || y > this.viewH) {
-        continue;
-      }
-      const row: FeedData = this.rows[r];
-
-      this.ctx.save();
-      this.ctx.beginPath();
-      this.ctx.rect(frozenW, 0, Math.max(0, this.viewW - frozenW), this.viewH);
-      this.ctx.clip();
-      let cx: number = frozenW - this.offsetX;
-      for (let i = 0; i < normal.length; i++) {
-        const col: number = normal[i];
-        this.ctx.fillStyle = this.cellFillColor(row, col, r);
-        this.ctx.fillRect(cx, y, WIDTHS[col], ROW_H);
-        this.ctx.strokeStyle = this.cellStrokeColor(row, col, r);
-        this.ctx.lineWidth = 0.5;
-        this.ctx.strokeRect(cx, y, WIDTHS[col], ROW_H);
-        const text: string = col === 0 ? (r + 1).toString() : this.cellText(row, col);
-        if (text.length > 0) {
-          this.ctx.fillStyle = this.cellColor(col);
-          this.ctx.font = 'bold 12vp sans-serif';
-          this.ctx.textAlign = 'center';
-          this.ctx.textBaseline = 'middle';
-          this.ctx.fillText(text, cx + WIDTHS[col] / 2, y + ROW_H / 2);
-        }
-        cx += WIDTHS[col];
-      }
-      this.ctx.restore();
-
-      let fx: number = 0;
-      for (let i = 0; i < fixed.length; i++) {
-        const col: number = fixed[i];
-        this.ctx.fillStyle = this.cellFillColor(row, col, r);
-        this.ctx.fillRect(fx, y, WIDTHS[col], ROW_H);
-        this.ctx.strokeStyle = this.cellStrokeColor(row, col, r);
-        this.ctx.lineWidth = 0.5;
-        this.ctx.strokeRect(fx, y, WIDTHS[col], ROW_H);
-        const text: string = col === 0 ? (r + 1).toString() : this.cellText(row, col);
-        if (text.length > 0) {
-          this.ctx.fillStyle = this.cellColor(col);
-          this.ctx.font = 'bold 12vp sans-serif';
-          this.ctx.textAlign = 'center';
-          this.ctx.textBaseline = 'middle';
-          this.ctx.fillText(text, fx + WIDTHS[col] / 2, y + ROW_H / 2);
-        }
-        fx += WIDTHS[col];
-      }
-    }
-  }
-
+  // ===== 滚动 =====
   private stopFling(): void {
     if (this.flingTimer !== -1) {
       clearInterval(this.flingTimer);
@@ -1004,7 +852,6 @@ export struct MixCalcTable {
       }
       this.offsetX = nextX;
       this.offsetY = nextY;
-      this.drawBody();
       if (Math.abs(velocityX) < 15 && Math.abs(velocityY) < 15) {
         this.stopFling();
       }
@@ -1022,170 +869,190 @@ export struct MixCalcTable {
     this.recomputeFirstRow();
   }
 
+  @Builder
+  cellView(row: FeedData, col: number, r: number) {
+    Text(this.cellText(row, col, r))
+      .width(WIDTHS[col])
+      .height(ROW_H)
+      .fontSize(12)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(this.cellColor(col))
+      .textAlign(TextAlign.Center)
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      .backgroundColor(this.cellFill(row, col, r))
+      .border({ width: 0.5, color: this.cellBorderColor(row, col, r) })
+      .onClick(() => {
+        this.openEditor(r, col);
+      })
+      .gesture(
+        LongPressGesture({ duration: 350 })
+          .onAction(() => {
+            this.openRatio(r, col);
+          })
+      )
+  }
+
+  @Builder
+  headerCell(col: number) {
+    Text(this.headLabel(col))
+      .width(WIDTHS[col])
+      .height(HEAD_H)
+      .fontSize(12)
+      .fontWeight(FontWeight.Bold)
+      .fontColor('#000000')
+      .textAlign(TextAlign.Center)
+      .maxLines(1)
+      .backgroundColor(col === 4 && this.fermentedInWater ? '#F0F8F0' : '#E8F5E9')
+      .border({
+        width: col === 4 && this.fermentedInAverage ? 1.5 : 0.5,
+        color: col === 4 && this.fermentedInAverage ? '#6E511E' : '#000000'
+      })
+      .onClick(() => {
+        const x: number = this.columnLeft(col);
+        if (col === 9) {
+          this.showWaterPicker(col, x);
+        } else if (col === 4) {
+          this.showFermentPicker(col, x);
+        }
+      })
+      .gesture(
+        LongPressGesture({ duration: 350 })
+          .onAction(() => {
+            this.showColumnMenu(col, this.columnLeft(col));
+          })
+      )
+  }
+
+  @Builder
+  footerCell(col: number) {
+    Text(this.footerText(col))
+      .width(WIDTHS[col])
+      .height(FOOT_H)
+      .fontSize(12)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(this.footerColor(col))
+      .textAlign(TextAlign.Center)
+      .maxLines(1)
+      .backgroundColor(this.footerCellBg(col))
+      .border({ width: 0.5, color: '#000000' })
+      .onClick(() => {
+        if (col === 1) {
+          this.onHelp();
+        } else if (col === 10) {
+          this.confirmReset();
+        }
+      })
+  }
+
   build() {
     Stack() {
       Column() {
-      Stack({ alignContent: Alignment.TopStart }) {
-        Row() {
-          ForEach(this.normalIndices(), (col: number) => {
-            Text(this.headLabel(col))
-              .width(WIDTHS[col])
-              .height(HEAD_H)
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#000000')
-              .textAlign(TextAlign.Center)
-              .border({ width: col === 4 && this.fermentedInAverage ? 1.5 : 0.5, color: col === 4 && this.fermentedInAverage ? '#6E511E' : '#000000' })
+        // 表头
+        Stack({ alignContent: Alignment.TopStart }) {
+          Row() {
+            ForEach(this.normalIndices(), (col: number) => {
+              this.headerCell(col)
+            }, (col: number) => 'h' + col.toString())
+          }
+          .translate({ x: this.frozenWidth() - this.offsetX })
 
-              .backgroundColor(col === 4 && this.fermentedInWater ? '#F0F8F0' : '#E8F5E9')
-              .onClick(() => {
-                if (col === 9) {
-                  this.showWaterPicker(col);
-                } else if (col === 4) {
-                  this.showFermentPicker(col);
-                }
-              })
-              .gesture(LongPressGesture().onAction(() => {
-                this.showColumnMenu(col);
-              }))
-          }, (col: number) => 'h' + col.toString())
+          Row() {
+            ForEach(this.fixedIndices(), (col: number) => {
+              this.headerCell(col)
+            }, (col: number) => 'hf' + col.toString())
+          }
+          .zIndex(1)
         }
-        .position({ x: this.frozenWidth() - this.offsetX, y: 0 })
+        .width('100%')
+        .height(HEAD_H)
+        .backgroundColor('#E8F5E9')
+        .clip(true)
 
-        Row() {
-          ForEach(this.fixedIndices(), (col: number) => {
-            Text(this.headLabel(col))
-              .width(WIDTHS[col])
-              .height(HEAD_H)
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#000000')
-              .textAlign(TextAlign.Center)
-              .border({ width: col === 4 && this.fermentedInAverage ? 1.5 : 0.5, color: col === 4 && this.fermentedInAverage ? '#6E511E' : '#000000' })
-
-              .backgroundColor(col === 4 && this.fermentedInWater ? '#F0F8F0' : '#E8F5E9')
-              .onClick(() => {
-                if (col === 9) {
-                  this.showWaterPicker(col);
-                } else if (col === 4) {
-                  this.showFermentPicker(col);
-                }
-              })
-              .gesture(LongPressGesture().onAction(() => {
-                this.showColumnMenu(col);
-              }))
-          }, (col: number) => 'f' + col.toString())
-        }
-      }
-      .width('100%')
-      .height(HEAD_H)
-      .backgroundColor('#E8F5E9')
-      .clip(true)
-
-      Stack() {
-        Canvas(this.ctx)
-          .width('100%')
-          .height('100%')
-          .onReady(() => {
-            this.viewW = this.ctx.width;
-            this.viewH = this.ctx.height;
-            this.drawBody();
-          })
-          .onAreaChange((_oldValue: Area, newValue: Area) => {
-            this.viewW = Number(newValue.width);
-            this.viewH = Number(newValue.height);
-            this.drawBody();
-          })
-
-        Column()
-          .width('100%')
-          .height('100%')
-          .backgroundColor('#01000000')
-          .onTouch((event: TouchEvent) => {
-            if (event.touches.length === 0) {
-              return;
-            }
-            if (event.type === TouchType.Down) {
-              this.downAt = Date.now();
-              this.downX = event.touches[0].x;
-              this.downY = event.touches[0].y;
-              this.downMoved = false;
-            } else if (event.type === TouchType.Move) {
-              if (Math.abs(event.touches[0].x - this.downX) > 8
-                || Math.abs(event.touches[0].y - this.downY) > 8) {
-                this.downMoved = true;
+        // 表体
+        Stack({ alignContent: Alignment.TopStart }) {
+          Column() {
+            ForEach(this.rows, (row: FeedData, r: number) => {
+              Row() {
+                ForEach(this.normalIndices(), (col: number) => {
+                  this.cellView(row, col, r)
+                }, (col: number) => 'c' + r.toString() + '_' + col.toString() + '_' + this.version.toString())
               }
-            } else if (event.type === TouchType.Up) {
-              const dt: number = Date.now() - this.downAt;
-              promptAction.showToast({ message: 'body ' + dt.toString(), duration: 1500 });
-              if (!this.downMoved) {
-                if (dt >= 300) {
-                  this.handleFeedLongPress(this.downX, this.downY);
-                } else {
-                  const row: number = Math.floor((this.downY + this.offsetY) / ROW_H);
-                  if (row >= 0 && row < this.rows.length) {
-                    this.openEditor(row, this.columnAt(this.downX));
-                  }
-                }
+              .height(ROW_H)
+            }, (row: FeedData, r: number) => 'row' + r.toString() + '_' + this.version.toString())
+          }
+          .width(this.normalWidth())
+          .position({ x: this.frozenWidth() - this.offsetX, y: -this.offsetY })
+
+          Column() {
+            ForEach(this.rows, (row: FeedData, r: number) => {
+              Row() {
+                ForEach(this.fixedIndices(), (col: number) => {
+                  this.cellView(row, col, r)
+                }, (col: number) => 'f' + r.toString() + '_' + col.toString() + '_' + this.version.toString())
               }
-            }
-          })
-      }
-      .layoutWeight(1)
-      .width('100%')
-
-      Stack({ alignContent: Alignment.TopStart }) {
-        Row() {
-          ForEach(this.normalIndices(), (col: number) => {
-            Text(this.footerText(col))
-              .width(WIDTHS[col])
-              .height(FOOT_H)
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.footerColor(col))
-              .textAlign(TextAlign.Center)
-              .border({ width: 0.5, color: '#000000' })
-              .backgroundColor(this.footerCellBg(col))
-              .onClick(() => {
-                if (col === 1) {
-                  this.onHelp();
-                } else if (col === 10) {
-                  this.confirmReset();
-                }
-              })
-          }, (col: number) => 'hn' + col.toString())
+              .height(ROW_H)
+            }, (row: FeedData, r: number) => 'frow' + r.toString() + '_' + this.version.toString())
+          }
+          .width(this.frozenWidth())
+          .position({ x: 0, y: -this.offsetY })
+          .zIndex(1)
         }
-        .position({ x: this.frozenWidth() - this.offsetX, y: 0 })
+        .layoutWeight(1)
+        .width('100%')
+        .backgroundColor(Color.White)
+        .clip(true)
+        .onAreaChange((_oldValue: Area, newValue: Area) => {
+          this.viewW = Number(newValue.width);
+          this.viewH = Number(newValue.height);
+        })
+        .gesture(
+          PanGesture()
+            .onActionStart(() => {
+              this.stopFling();
+              this.lastPanX = 0;
+              this.lastPanY = 0;
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              const dx: number = event.offsetX - this.lastPanX;
+              const dy: number = event.offsetY - this.lastPanY;
+              this.lastPanX = event.offsetX;
+              this.lastPanY = event.offsetY;
+              this.offsetX -= dx;
+              this.offsetY -= dy;
+              this.clampOffsets();
+            })
+            .onActionEnd((event: GestureEvent) => {
+              this.startFling(event.velocityX, event.velocityY);
+            })
+        )
 
-        Row() {
-          ForEach(this.fixedIndices(), (col: number) => {
-            Text(this.footerText(col))
-              .width(WIDTHS[col])
-              .height(FOOT_H)
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.footerColor(col))
-              .textAlign(TextAlign.Center)
-              .border({ width: 0.5, color: '#000000' })
-              .backgroundColor(this.footerCellBg(col))
-              .onClick(() => {
-                if (col === 1) {
-                  this.onHelp();
-                } else if (col === 10) {
-                  this.confirmReset();
-                }
-              })
-          }, (col: number) => 'fn' + col.toString())
+        // 表尾
+        Stack({ alignContent: Alignment.TopStart }) {
+          Row() {
+            ForEach(this.normalIndices(), (col: number) => {
+              this.footerCell(col)
+            }, (col: number) => 'f' + col.toString())
+          }
+          .translate({ x: this.frozenWidth() - this.offsetX })
+
+          Row() {
+            ForEach(this.fixedIndices(), (col: number) => {
+              this.footerCell(col)
+            }, (col: number) => 'ff' + col.toString())
+          }
+          .zIndex(1)
         }
-      }
-      .width('100%')
-      .height(FOOT_H)
-      .backgroundColor('#EAF3EC')
-      .clip(true)
+        .width('100%')
+        .height(FOOT_H)
+        .backgroundColor('#EAF3EC')
+        .clip(true)
       }
       .width('100%')
       .height('100%')
+      .backgroundColor(Color.White)
 
+      // 列操作菜单
       if (this.colMenuOpen) {
         Column()
           .width('100%')
@@ -1229,6 +1096,54 @@ export struct MixCalcTable {
         .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
         .position({ x: this.colMenuX, y: HEAD_H })
       }
+
+      // 水比 / 发酵料
+      if (this.pickOpen) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor('#00000000')
+          .onClick(() => {
+            this.pickOpen = false;
+          })
+
+        Column() {
+          Text(this.pickTitle)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#000000')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 12, left: 16, right: 16 })
+
+          Divider().strokeWidth(1).color('#E0E0E0')
+
+          ForEach(this.pickItems, (item: string, index: number) => {
+            Row() {
+              Text(item)
+                .layoutWeight(1)
+                .fontSize(15)
+                .fontColor('#333333')
+                .textAlign(TextAlign.Center)
+            }
+            .width('100%')
+            .height(40)
+            .onClick(() => {
+              this.applyPick(index);
+            })
+            if (index < this.pickItems.length - 1) {
+              Divider().strokeWidth(1).color('#E0E0E0')
+            }
+          }, (item: string, index: number) => item + index.toString())
+        }
+        .width(Math.min(200, this.viewW))
+        .backgroundColor(Color.White)
+        .borderRadius(12)
+        .clip(true)
+        .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
+        .position({ x: this.pickX, y: HEAD_H })
+      }
+
+      // 换料比例
       if (this.ratioOpen) {
         Column()
           .width('100%')
@@ -1270,7 +1185,7 @@ export struct MixCalcTable {
             if (p < 90) {
               Divider().strokeWidth(1).color('#E0E0E0')
             }
-          }, (p: number) => 'r' + p.toString())
+          }, (p: number) => 'ratio' + p.toString())
         }
         .width(Math.min(160, this.viewW))
         .backgroundColor(Color.White)
@@ -1279,71 +1194,8 @@ export struct MixCalcTable {
         .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
         .position({ x: this.ratioX, y: this.ratioY })
       }
-
-      if (this.pickOpen) {
-        Column()
-          .width('100%')
-          .height('100%')
-          .backgroundColor('#00000000')
-          .onClick(() => {
-            this.pickOpen = false;
-          })
-
-        Column() {
-          Text(this.pickTitle)
-            .fontSize(16)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#000000')
-            .textAlign(TextAlign.Center)
-            .padding({ top: 14, bottom: 12, left: 16, right: 16 })
-
-          Divider().strokeWidth(1).color('#E0E0E0')
-
-          ForEach(this.pickItems, (item: string, index: number) => {
-            Text(item)
-              .width('100%')
-              .height(40)
-              .fontSize(15)
-              .fontColor('#333333')
-              .textAlign(TextAlign.Center)
-              .onClick(() => {
-                this.applyPick(index);
-              })
-            if (index < this.pickItems.length - 1) {
-              Divider().strokeWidth(1).color('#E0E0E0')
-            }
-          }, (item: string, index: number) => item + index.toString())
-        }
-        .width(Math.min(200, this.viewW))
-        .backgroundColor(Color.White)
-        .borderRadius(12)
-        .clip(true)
-        .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
-        .position({ x: this.pickX, y: this.pickY })
-      }
-
     }
     .width('100%')
     .height('100%')
-    .gesture(
-      PanGesture()
-        .onActionStart(() => {
-          this.stopFling();
-          this.lastPanX = 0;
-          this.lastPanY = 0;
-        })
-        .onActionUpdate((event: GestureEvent) => {
-          const dx: number = event.offsetX - this.lastPanX;
-          const dy: number = event.offsetY - this.lastPanY;
-          this.lastPanX = event.offsetX;
-          this.lastPanY = event.offsetY;
-          this.offsetX -= dx;
-          this.offsetY -= dy;
-          this.drawBody();
-        })
-        .onActionEnd((event: GestureEvent) => {
-          this.startFling(event.velocityX, event.velocityY);
-        })
-    )
   }
 }
