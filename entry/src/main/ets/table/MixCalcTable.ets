@@ -318,6 +318,17 @@ export struct MixCalcTable {
     return Math.max(0, this.bodyHeight() - this.viewH);
   }
 
+  // 编辑器横坐标：非冻结列不允许压到冻结列（序号）上面
+  private editorX(): number {
+    const x: number = this.columnLeft(this.editingCol);
+    if (this.isFixed(this.editingCol)) {
+      return x;
+    }
+    const fw: number = this.frozenWidth();
+    const w: number = WIDTHS[this.editingCol];
+    return Math.max(fw, Math.min(x, this.viewW - w));
+  }
+
   private clampOffsets(): void {
     this.offsetX = Math.min(Math.max(0, this.offsetX), this.maxOffsetX());
     this.offsetY = Math.min(Math.max(0, this.offsetY), this.maxOffsetY());
@@ -326,6 +337,14 @@ export struct MixCalcTable {
       const top: number = this.editingRow * ROW_H - this.offsetY;
       if (top + ROW_H <= 0 || top >= this.viewH) {
         this.finishEdit();
+        return;
+      }
+      if (this.editingCol >= 0 && !this.isFixed(this.editingCol)) {
+        const x: number = this.columnLeft(this.editingCol);
+        const w: number = WIDTHS[this.editingCol];
+        if (x + w <= this.frozenWidth() || x >= this.viewW) {
+          this.finishEdit();
+        }
       }
     }
   }
@@ -1441,7 +1460,7 @@ export struct MixCalcTable {
             .border({ width: 1.5, color: '#2D8C42' })
             .caretColor('#2D8C42')
             .position({
-              x: this.columnLeft(this.editingCol),
+              x: this.editorX(),
               y: HEAD_H + this.editingRow * ROW_H - this.offsetY
             })
             .zIndex(5)
@@ -1480,7 +1499,7 @@ export struct MixCalcTable {
             .backgroundColor(Color.White)
             .border({ width: 1.5, color: '#2D8C42' })
             .position({
-              x: this.columnLeft(this.editingCol),
+              x: this.editorX(),
               y: HEAD_H + this.editingRow * ROW_H - this.offsetY
             })
             .zIndex(5)
