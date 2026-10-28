@@ -659,66 +659,66 @@ export struct MixCalcTable {
   // 换格时键盘不会收起来再弹，也不会闪
   @Builder
   numKeypad() {
-    Column() {
-      Row() {
-        this.padNum('1')
-        this.padNum('2')
-        this.padNum('3')
-        this.padFn('\u232B', () => {
-          this.padBackspace();
-        })
-      }
-      .width('100%')
-      Row() {
-        this.padNum('4')
-        this.padNum('5')
-        this.padNum('6')
-        this.padFn('清空', () => {
-          this.padClear();
-        })
-      }
-      .width('100%')
-      Row() {
-        this.padNum('7')
-        this.padNum('8')
-        this.padNum('9')
-        if (this.editingCol === 1) {
-          this.padFn('-', () => {
-            this.padInput('-');
-          })
-        } else {
+    Row() {
+      // 左边 3 列数字，4 行
+      Column() {
+        Row() {
+          this.padNum('1')
+          this.padNum('2')
+          this.padNum('3')
+        }
+        .width('100%')
+        Row() {
+          this.padNum('4')
+          this.padNum('5')
+          this.padNum('6')
+        }
+        .width('100%')
+        Row() {
+          this.padNum('7')
+          this.padNum('8')
+          this.padNum('9')
+        }
+        .width('100%')
+        Row() {
+          this.padNum('0')
+          this.padNum('00')
           this.padFn('.', () => {
             this.padDot();
           })
         }
+        .width('100%')
       }
-      .width('100%')
-      Row() {
-        this.padNum('0')
-        this.padNum('00')
-        this.padNext()
+      .layoutWeight(3)
+
+      // 右边一列：退格、清空，下面是竖着占两行的「下一步」
+      Column() {
+        this.padFn('\u232B', () => {
+          this.padBackspace();
+        })
+        this.padFn('清空', () => {
+          this.padClear();
+        })
+        Text('下一步')
+          .width('100%')
+          .height(110)
+          .margin(3)
+          .fontSize(16)
+          .fontColor(Color.White)
+          .textAlign(TextAlign.Center)
+          .backgroundColor('#2D8C42')
+          .borderRadius(6)
+          .onClick(() => {
+            this.nextCell();
+          })
       }
-      .width('100%')
+      .layoutWeight(1)
+      .height('100%')
     }
     .width('100%')
+    .height(266)
     .padding({ left: 4, right: 4, top: 4, bottom: 30 })
     .backgroundColor('#ECECEC')
-  }
-
-  @Builder
-  padNext() {
-    Text('下一步')
-      .layoutWeight(2)
-      .height(52)
-      .margin(3)
-      .fontSize(16)
-      .fontColor(Color.White)
-      .textAlign(TextAlign.Center)
-      .backgroundColor('#2D8C42')
-      .borderRadius(6)
-      .onClick(() => {
-        this.nextCell();
-      })
   }
 
   @Builder
@@ -741,12 +741,13 @@ export struct MixCalcTable {
   padFn(label: string, action: () => void) {
     Text(label)
       .layoutWeight(1)
+      .width('100%')
       .height(52)
       .margin(3)
-      .fontSize(label === '下一步' ? 16 : 18)
-      .fontColor(label === '下一步' ? Color.White : '#000000')
+      .fontSize(18)
+      .fontColor('#000000')
       .textAlign(TextAlign.Center)
-      .backgroundColor(label === '下一步' ? '#2D8C42' : '#D8D8D8')
+      .backgroundColor('#D8D8D8')
       .borderRadius(6)
       .onClick(action)
   }
@@ -852,6 +853,18 @@ export struct MixCalcTable {
     setTimeout(() => {
       this.suppressChange = false;
     }, 400);
+    // 棚号格是系统输入框，新建节点后要主动要一次焦点，否则只是显示了框、键盘不弹
+    if (column === 1) {
+      setTimeout(() => {
+        focusControl.requestFocus('cellEditor');
+      }, 300);
+      setTimeout(() => {
+        focusControl.requestFocus('cellEditor');
+      }, 700);
+      setTimeout(() => {
+        focusControl.requestFocus('cellEditor');
+      }, 1200);
+    }
     this.ensureEditorVisible();
   }
 
@@ -1433,6 +1446,7 @@ export struct MixCalcTable {
             })
             .zIndex(5)
             .defaultFocus(true)
+            .focusable(true)
             .enableKeyboardOnFocus(true)
             .enterKeyType(EnterKeyType.Next)
             .onChange((text: string) => {
