@@ -668,45 +668,49 @@ export struct MixCalcTable {
     }
     this.editDirty = false;
     const cols: number[] = this.editableColumns();
-    const col: number = this.editingCol;
-    const row: number = this.editingRow;
     if (cols.length === 0) {
       return;
     }
-    let pos: number = cols.indexOf(col);
+    let row: number = this.editingRow;
+    let pos: number = cols.indexOf(this.editingCol);
     if (pos < 0) {
       pos = 0;
     }
-    let nextRow: number = row;
-    let nextPos: number = pos + 1;
-    if (nextPos >= cols.length) {
-      nextRow = row + 1;
-      nextPos = 0;
+    // 一直往后找，跳过这一格不允许编辑的（对齐安卓：棚号/棚数没填时平均、料量都进不去）
+    let guard: number = 0;
+    const limit: number = cols.length * (this.rows.length + 1);
+    while (guard < limit) {
+      guard = guard + 1;
+      pos = pos + 1;
+      if (pos >= cols.length) {
+        pos = 0;
+        row = row + 1;
+      }
+      if (row >= this.rows.length) {
+        return;
+      }
+      const target: number = cols[pos];
+      if (this.isCellEnabled(this.rows[row], target)) {
+        this.moveEditor(row, target);
+        return;
+      }
     }
-    if (nextRow >= this.rows.length) {
-      return;
-    }
-    // 直接从旧格跳到新格，不经过“关闭”那一步：
-    // 输入框节点不销毁，焦点和键盘才不会掉（否则键盘一收就全退了）
-    const targetCol: number = cols[nextPos];
-    this.editRow = nextRow;
-    this.editCol = targetCol;
-    this.editingSeed = this.currentValue(nextRow, targetCol);
+  }
+
+  // 编辑器保持同一个节点、只换坐标和初值：焦点和键盘都不掉（键盘不会先退再弹）
+  private moveEditor(row: number, column: number): void {
+    this.editRow = row;
+    this.editCol = column;
+    this.editingSeed = this.currentValue(row, column);
     this.editingText = this.editingSeed;
-    this.editingRow = nextRow;
-    this.editingCol = targetCol;
+    this.editingRow = row;
+    this.editingCol = column;
     this.editorOpenedAt = Date.now();
     this.suppressChange = true;
     setTimeout(() => {
       this.suppressChange = false;
     }, 400);
     focusControl.requestFocus('cellEditor');
-    setTimeout(() => {
-      focusControl.requestFocus('cellEditor');
-    }, 40);
-    setTimeout(() => {
-      focusControl.requestFocus('cellEditor');
-    }, 160);
   }
 
   private openEditor(row: number, column: number): void {
@@ -1160,7 +1164,6 @@ export struct MixCalcTable {
             // 全表唯一输入框，挂在表体 Stack 里，坐标每次重排都算一遍：
             // 拖动表格时它跟着格子走（对齐安卓 CellEditorOverlay.layoutChild）
             // 换格时用 ForEach key 强制重建节点：defaultFocus 才会重新要焦点、弹键盘
-            ForEach([this.editingRow.toString() + '-' + this.editingCol.toString()], (cellKey: string) => {
             TextInput({ text: this.editingSeed })
               .id('cellEditor')
               .type(this.editingCol === 1 ? InputType.Normal : InputType.NUMBER_DECIMAL)
@@ -1199,7 +1202,6 @@ export struct MixCalcTable {
                 }
                 this.finishEdit();
               })
-            }, (cellKey: string) => cellKey)
           }
         }
         .layoutWeight(1)
