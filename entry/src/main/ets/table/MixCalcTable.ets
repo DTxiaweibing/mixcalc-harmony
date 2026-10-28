@@ -704,6 +704,9 @@ export struct MixCalcTable {
     setTimeout(() => {
       focusControl.requestFocus('cellEditor');
     }, 40);
+    setTimeout(() => {
+      focusControl.requestFocus('cellEditor');
+    }, 160);
   }
 
   private openEditor(row: number, column: number): void {
@@ -1156,6 +1159,8 @@ export struct MixCalcTable {
           if (this.editingRow >= 0 && this.editingCol >= 0) {
             // 全表唯一输入框，挂在表体 Stack 里，坐标每次重排都算一遍：
             // 拖动表格时它跟着格子走（对齐安卓 CellEditorOverlay.layoutChild）
+            // 换格时用 ForEach key 强制重建节点：defaultFocus 才会重新要焦点、弹键盘
+            ForEach([this.editingRow.toString() + '-' + this.editingCol.toString()], (cellKey: string) => {
             TextInput({ text: this.editingSeed })
               .id('cellEditor')
               .type(this.editingCol === 1 ? InputType.Normal : InputType.NUMBER_DECIMAL)
@@ -1187,8 +1192,14 @@ export struct MixCalcTable {
                 this.nextCell();
               })
               .onBlur(() => {
+                // 刚从这一格跳到下一格时，上一次的 blur 会晚一步到达；
+                // 不挡住的话它会把刚打开的新格连键盘一起关掉（就是“跳过去又退回来”）
+                if (Date.now() - this.editorOpenedAt < 400) {
+                  return;
+                }
                 this.finishEdit();
               })
+            }, (cellKey: string) => cellKey)
           }
         }
         .layoutWeight(1)
