@@ -190,6 +190,7 @@ export struct MixCalcTable {
   private editorOpenedAt: number = 0;
   // 程序化改文本（换格塞初值）时压住 onChange，不然一换格就当用户输入提交了
   private suppressChange: boolean = false;
+  private editorCtrl: TextInputController = new TextInputController();
 
   @State colMenuOpen: boolean = false;
   @State colMenuX: number = 0;
@@ -318,6 +319,13 @@ export struct MixCalcTable {
   private clampOffsets(): void {
     this.offsetX = Math.min(Math.max(0, this.offsetX), this.maxOffsetX());
     this.offsetY = Math.min(Math.max(0, this.offsetY), this.maxOffsetY());
+    // 编辑中的格子滚出可视区就收起来（对齐安卓 CellEditorOverlay.onScrolled）
+    if (this.editingRow >= 0) {
+      const top: number = this.editingRow * ROW_H - this.offsetY;
+      if (top + ROW_H <= 0 || top >= this.viewH) {
+        this.finishEdit();
+      }
+    }
   }
 
   private columnLeft(index: number): number {
@@ -697,7 +705,7 @@ export struct MixCalcTable {
     }
   }
 
-  // 编辑器保持同一个节点、只换坐标和初值：焦点和键盘都不掉（键盘不会先退再弹）
+  // 编辑器保持同一个节点、只换坐标和初值：不动焦点，键盘才不会收
   private moveEditor(row: number, column: number): void {
     this.editRow = row;
     this.editCol = column;
@@ -710,7 +718,14 @@ export struct MixCalcTable {
     setTimeout(() => {
       this.suppressChange = false;
     }, 400);
+    // 输入框节点是稳的（在最外层 Stack），这里补抢焦点，键盘跟着回来
     focusControl.requestFocus('cellEditor');
+    setTimeout(() => {
+      focusControl.requestFocus('cellEditor');
+    }, 60);
+    setTimeout(() => {
+      focusControl.requestFocus('cellEditor');
+    }, 180);
   }
 
   private openEditor(row: number, column: number): void {
@@ -1160,49 +1175,6 @@ export struct MixCalcTable {
           .width(this.frozenWidth())
           .position({ x: 0, y: -this.offsetY })
           .zIndex(1)
-          if (this.editingRow >= 0 && this.editingCol >= 0) {
-            // 全表唯一输入框，挂在表体 Stack 里，坐标每次重排都算一遍：
-            // 拖动表格时它跟着格子走（对齐安卓 CellEditorOverlay.layoutChild）
-            // 换格时用 ForEach key 强制重建节点：defaultFocus 才会重新要焦点、弹键盘
-            TextInput({ text: this.editingSeed })
-              .id('cellEditor')
-              .type(this.editingCol === 1 ? InputType.Normal : InputType.NUMBER_DECIMAL)
-              .width(WIDTHS[this.editingCol])
-              .height(ROW_H)
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#000000')
-              .textAlign(TextAlign.Center)
-              .maxLines(1)
-              .padding(0)
-              .borderRadius(0)
-              .backgroundColor(Color.White)
-              .border({ width: 1.5, color: '#2D8C42' })
-              .caretColor('#2D8C42')
-              .position({ x: this.columnLeft(this.editingCol), y: this.editingRow * ROW_H - this.offsetY })
-              .zIndex(5)
-              .defaultFocus(true)
-              .enterKeyType(EnterKeyType.Next)
-              .onChange((text: string) => {
-                this.editingText = text;
-                if (this.suppressChange) {
-                  this.suppressChange = false;
-                  return;
-                }
-                this.editLive(text);
-              })
-              .onSubmit(() => {
-                this.nextCell();
-              })
-              .onBlur(() => {
-                // 刚从这一格跳到下一格时，上一次的 blur 会晚一步到达；
-                // 不挡住的话它会把刚打开的新格连键盘一起关掉（就是“跳过去又退回来”）
-                if (Date.now() - this.editorOpenedAt < 400) {
-                  return;
-                }
-                this.finishEdit();
-              })
-          }
         }
         .layoutWeight(1)
         .width('100%')
@@ -1277,6 +1249,54 @@ export struct MixCalcTable {
             this.startFling(event.velocityX, event.velocityY);
           })
       )
+
+      // 单元格编辑器：放在最外层 Stack（和表体平级），
+      // 表体重排不会重建它，焦点和键盘才稳；坐标自己按 表头高 + 行号*行高 - 滚动量 算
+      if (this.editingRow >= 0 && this.editingCol >= 0) {
+        TextInput({ text: this.editingSeed, controller: this.editorCtrl })
+          .id('cellEditor')
+          .type(this.editingCol === 1 ? InputType.Normal : InputType.NUMBER_DECIMAL)
+          .width(WIDTHS[this.editingCol])
+          .height(ROW_H)
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#000000')
+          .textAlign(TextAlign.Center)
+          .maxLines(1)
+          .padding(0)
+          .borderRadius(0)
+          // 只允许数字和小数点；棚号那一列额外允许“-”（区间 1-40 要用）
+          .inputFilter(this.editingCol === 1 ? '[0-9.-]' : '[0-9.]')
+          .backgroundColor(Color.White)
+          .border({ width: 1.5, color: '#2D8C42' })
+          .caretColor('#2D8C42')
+          .position({
+            x: this.columnLeft(this.editingCol),
+            y: HEAD_H + this.editingRow * ROW_H - this.offsetY
+          })
+          .zIndex(5)
+          .defaultFocus(true)
+          .enableKeyboardOnFocus(true)
+          .enterKeyType(EnterKeyType.Next)
+          .onChange((text: string) => {
+            this.editingText = text;
+            if (this.suppressChange) {
+              this.suppressChange = false;
+              return;
+            }
+            this.editLive(text);
+          })
+          .onSubmit(() => {
+            this.nextCell();
+          })
+          .onBlur(() => {
+            // 换格时上一次的 blur 会晚一步到达，别把新格连同键盘一起关掉
+            if (Date.now() - this.editorOpenedAt < 400) {
+              return;
+            }
+            this.finishEdit();
+          })
+      }
 
       // 列操作菜单
       if (this.colMenuOpen) {
