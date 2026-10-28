@@ -190,26 +190,29 @@ struct Index {
     this.rebuildTable();
   }
 
+  // 与安卓一致：列设置只列 9 列，不含“序号”和“称料”
   private settingsColumns(): number[] {
     const result: number[] = [];
-    for (let i = 1; i < COLUMN_IDS.length; i++) {
+    for (let i = 1; i < COLUMN_IDS.length - 1; i++) {
       result.push(i);
     }
     return result;
   }
 
+  // 与安卓 updateToggleStyle 一致：选中绿底、未选灰底，文字一律白色、圆角 8、铺满行高
   @Builder
   settingCell(label: string, selected: boolean, action: () => void) {
     Row() {
       Text(label)
         .fontSize(12)
-        .fontColor(selected ? Color.White : "#333333")
+        .fontColor(Color.White)
         .textAlign(TextAlign.Center)
     }
     .layoutWeight(1)
-    .height(28)
-    .backgroundColor(selected ? "#2D8C42" : "#FFFFFF")
-    .border({ width: 0.5, color: "#CCCCCC" })
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(selected ? "#2D8C42" : "#999999")
+    .borderRadius(8)
     .onClick(action)
   }
 
@@ -576,6 +579,7 @@ struct Index {
           }
           .width('100%')
           .height(40)
+          .padding({ left: 8, right: 8 })
           .backgroundColor('#E8F5E9')
 
           ForEach(this.settingsColumns(), (col: number) => {
