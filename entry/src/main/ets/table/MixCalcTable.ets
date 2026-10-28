@@ -211,6 +211,9 @@ export struct MixCalcTable {
   @State ratioY: number = 0;
   @State ratioCurrent: number = 0;
   private ratioRow: number = -1;
+  private ratioOpenedAt: number = 0;
+  private colMenuOpenedAt: number = 0;
+  private pickOpenedAt: number = 0;
 
   private lastPanX: number = 0;
   private lastPanY: number = 0;
@@ -329,7 +332,9 @@ export struct MixCalcTable {
     // 编辑中的格子滚出可视区就收起来（对齐安卓 CellEditorOverlay.onScrolled）
     if (this.editingRow >= 0) {
       const top: number = this.editingRow * ROW_H - this.offsetY;
-      if (top + ROW_H <= 0 || top >= this.viewH) {
+      // 只要这一行不再完整地待在表体里（钻到表头下面或滑出底部），就收起编辑，
+      // 免得输入框画到表头 / 表尾上面去
+      if (this.viewH > 0 && (top < 0 || top + ROW_H > this.viewH)) {
         this.finishEdit();
         return;
       }
@@ -949,6 +954,7 @@ export struct MixCalcTable {
     if (index === 0) {
       return;
     }
+    this.finishEdit();
     const fixed: boolean = this.isFixed(index);
     const visible: boolean = this.isVisible(index);
     this.colMenuIndex = index;
@@ -960,6 +966,7 @@ export struct MixCalcTable {
       t(this.lang, 'col.unfixAllCols')
     ];
     this.colMenuX = Math.max(0, Math.min(x, Math.max(0, this.viewW - 200)));
+    this.colMenuOpenedAt = Date.now();
     this.colMenuOpen = true;
   }
 
@@ -997,19 +1004,21 @@ export struct MixCalcTable {
 
   // ===== 水 / 发酵料 =====
   private showWaterPicker(index: number, x: number): void {
+    this.finishEdit();
     const items: string[] = [];
     for (let pct = 10; pct <= 40; pct += 5) {
       const label: string = t(this.lang, 'col.water') + pct.toString() + '%';
       items.push(pct === this.waterPercentage ? label + ' ✓' : label);
     }
     this.pickKind = 'water';
-    this.pickTitle = t(this.lang, 'water.title');
-    this.pickItems = items;
+    this.pickTitle = t(this.lang, 'water.title');    this.pickItems = items;
     this.pickX = Math.max(0, Math.min(x, Math.max(0, this.viewW - 200)));
+    this.pickOpenedAt = Date.now();
     this.pickOpen = true;
   }
 
   private showFermentPicker(index: number, x: number): void {
+    this.finishEdit();
     this.pickKind = 'ferment';
     this.pickTitle = t(this.lang, 'ferment.title');
     this.pickItems = [
@@ -1019,6 +1028,7 @@ export struct MixCalcTable {
       (this.fermentedInAverage ? '○ ' : '● ') + t(this.lang, 'ferment.exAvg')
     ];
     this.pickX = Math.max(0, Math.min(x, Math.max(0, this.viewW - 200)));
+    this.pickOpenedAt = Date.now();
     this.pickOpen = true;
   }
 
@@ -1040,11 +1050,14 @@ export struct MixCalcTable {
     if (!this.isSwitchTargetCell(data, column)) {
       return;
     }
+    // 弹菜单前先收起单元格编辑，不然输入框会压在菜单上面
+    this.finishEdit();
     this.ratioRow = row;
     this.ratioCurrent = data.switchRatio;
     const maxX: number = Math.max(0, this.viewW - 160);
     this.ratioX = Math.max(0, Math.min(this.columnLeft(column), maxX));
     this.ratioY = Math.min((row + 1) * ROW_H - this.offsetY, Math.max(0, this.viewH - 260));
+    this.ratioOpenedAt = Date.now();
     this.ratioOpen = true;
   }
 
@@ -1458,7 +1471,7 @@ export struct MixCalcTable {
               x: this.editorX(),
               y: HEAD_H + this.editingRow * ROW_H - this.offsetY
             })
-            .zIndex(5)
+            .zIndex(0)
             .defaultFocus(true)
             .focusable(true)
             .enableKeyboardOnFocus(true)
@@ -1497,7 +1510,7 @@ export struct MixCalcTable {
               x: this.editorX(),
               y: HEAD_H + this.editingRow * ROW_H - this.offsetY
             })
-            .zIndex(5)
+            .zIndex(0)
         }
       }
 
@@ -1508,6 +1521,10 @@ export struct MixCalcTable {
           .height('100%')
           .backgroundColor('#00000000')
           .onClick(() => {
+            // 长按松手那一下不要立刻把刚弹出来的菜单点掉
+            if (Date.now() - this.colMenuOpenedAt < 450) {
+              return;
+            }
             this.colMenuOpen = false;
           })
 
@@ -1554,6 +1571,9 @@ export struct MixCalcTable {
           .height('100%')
           .backgroundColor('#00000000')
           .onClick(() => {
+            if (Date.now() - this.pickOpenedAt < 450) {
+              return;
+            }
             this.pickOpen = false;
           })
 
@@ -1600,6 +1620,9 @@ export struct MixCalcTable {
           .height('100%')
           .backgroundColor('#00000000')
           .onClick(() => {
+            if (Date.now() - this.ratioOpenedAt < 450) {
+              return;
+            }
             this.ratioOpen = false;
           })
 
