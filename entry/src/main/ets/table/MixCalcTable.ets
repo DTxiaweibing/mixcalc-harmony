@@ -439,11 +439,15 @@ export struct MixCalcTable {
     if (this.isWarningCell(data, column, rowIndex)) {
       return '#FFC64B';
     }
+    // 换料目标格：浅绿。直接改过这格数值后 switchRatio 会被清 0，自动回乳白
+    if (column >= 5 && column <= 8 && data.shedCount > 0 && data.switchRatio > 0
+      && this.isSwitchTargetCell(data, column)) {
+      return '#F0F8F0';
+    }
     // 不能输入的格子（还没填棚数）保持灰色
     if (column >= 4 && column <= 8 && data.shedCount <= 0) {
       return '#F0F0F0';
     }
-    // 换料目标格不再单独上浅绿，和其它空格同色
     return '#FFFFFF';
   }
 
@@ -1243,7 +1247,7 @@ export struct MixCalcTable {
     Text(this.cellText(row, col, r))
       .width(WIDTHS[col])
       .height(ROW_H)
-      .fontSize(12)
+      .fontSize(14)
       .fontWeight(FontWeight.Bold)
       .fontColor(this.cellColor(col))
       .textAlign(TextAlign.Center)
@@ -1267,14 +1271,15 @@ export struct MixCalcTable {
     Text(this.headLabel(col))
       .width(WIDTHS[col])
       .height(HEAD_H)
-      .fontSize(12)
+      .fontSize(14)
       .fontWeight(FontWeight.Bold)
       .fontColor('#000000')
       .textAlign(TextAlign.Center)
       .maxLines(1)
-      .backgroundColor(col === 4 && this.fermentedInWater ? '#F0F8F0' : '#E8F5E9')
+      // 表头默认乳白；只有发酵料表头按“参与算水”上浅绿，“参与算料”加粗棕边
+      .backgroundColor(col === 4 && this.fermentedInWater ? '#F0F8F0' : '#FFFFFF')
       .border({
-        width: col === 4 && this.fermentedInAverage ? 1.5 : 0.5,
+        width: col === 4 && this.fermentedInAverage ? 3 : 0.5,
         color: col === 4 && this.fermentedInAverage ? '#6E511E' : '#000000'
       })
       .onClick(() => {
@@ -1298,7 +1303,7 @@ export struct MixCalcTable {
     Text(this.footerText(col))
       .width(WIDTHS[col])
       .height(FOOT_H)
-      .fontSize(12)
+      .fontSize(14)
       .fontWeight(FontWeight.Bold)
       .fontColor(this.footerColor(col))
       .textAlign(TextAlign.Center)
@@ -1334,7 +1339,7 @@ export struct MixCalcTable {
         }
         .width('100%')
         .height(HEAD_H)
-        .backgroundColor('#E8F5E9')
+        .backgroundColor('#FFFFFF')
         .clip(true)
 
         // 表体
@@ -1455,7 +1460,7 @@ export struct MixCalcTable {
             .type(InputType.Normal)
             .width(WIDTHS[this.editingCol])
             .height(ROW_H)
-            .fontSize(12)
+            .fontSize(14)
             .fontWeight(FontWeight.Bold)
             .fontColor('#000000')
             .textAlign(TextAlign.Center)
@@ -1497,7 +1502,7 @@ export struct MixCalcTable {
           Text(this.editorText)
             .width(WIDTHS[this.editingCol])
             .height(ROW_H)
-            .fontSize(12)
+            .fontSize(14)
             .fontWeight(FontWeight.Bold)
             .fontColor('#000000')
             .textAlign(TextAlign.Center)
