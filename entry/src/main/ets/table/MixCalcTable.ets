@@ -1,6 +1,5 @@
 import { FeedData } from '../model/FeedData';
 import { t } from '../common/Strings';
-import { CellEditor } from './CellEditor';
 
 const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
 const HEAD_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
@@ -180,9 +179,6 @@ export struct MixCalcTable {
   @State viewW: number = 0;
   @State viewH: number = 0;
   @State version: number = 0;
-  @State editingRow: number = -1;
-  @State editingCol: number = -1;
-  @State editingText: string = '';
 
   @State colMenuOpen: boolean = false;
   @State colMenuX: number = 0;
@@ -614,50 +610,6 @@ export struct MixCalcTable {
     this.onChanged();
   }
 
-  /** 按可见顺序取可编辑列（1..8），用于跳格 */
-  private editableColumns(): number[] {
-    const result: number[] = [];
-    const fixed: number[] = this.fixedIndices();
-    for (let i = 0; i < fixed.length; i++) {
-      if (this.isEditableColumn(fixed[i])) {
-        result.push(fixed[i]);
-      }
-    }
-    const normal: number[] = this.normalIndices();
-    for (let i = 0; i < normal.length; i++) {
-      if (this.isEditableColumn(normal[i])) {
-        result.push(normal[i]);
-      }
-    }
-    return result;
-  }
-
-  /** 提交当前值并跳到下一格：右边一格；行末则下一行首格；到底则结束 */
-  private nextCell(): void {
-    this.applyEdit(this.editingText);
-    const cols: number[] = this.editableColumns();
-    const col: number = this.editingCol;
-    const row: number = this.editingRow;
-    this.editingRow = -1;
-    this.editingCol = -1;
-    if (cols.length === 0) {
-      return;
-    }
-    let pos: number = cols.indexOf(col);
-    if (pos < 0) {
-      pos = 0;
-    }
-    let nextRow: number = row;
-    let nextPos: number = pos + 1;
-    if (nextPos >= cols.length) {
-      nextRow = row + 1;
-      nextPos = 0;
-    }
-    if (nextRow >= this.rows.length) {
-      return;
-    }
-    this.openEditor(nextRow, cols[nextPos]);
-  }
   private openEditor(row: number, column: number): void {
     if (!this.isEditableColumn(column) || row < 0 || row >= this.rows.length) {
       return;
@@ -670,9 +622,7 @@ export struct MixCalcTable {
     this.editorTitle = this.headLabel(column) + ' · ' + t(this.lang, 'dlg.row').replace('%d', (row + 1).toString());
     this.editorValue = this.currentValue(row, column);
     this.editorIsNumber = column !== 1;
-    this.editingRow = row;
-    this.editingCol = column;
-    this.editingText = this.currentValue(row, column);
+    this.editorController.open();
   }
 
   // ===== 列操作菜单 =====
@@ -1160,24 +1110,6 @@ export struct MixCalcTable {
             this.startFling(event.velocityX, event.velocityY);
           })
       )
-
-      if (this.editingRow >= 0 && this.editingCol >= 0) {
-        CellEditor({
-          value: this.editingText,
-          widthVp: WIDTHS[this.editingCol],
-          heightVp: ROW_H,
-          xVp: this.columnLeft(this.editingCol),
-          yVp: HEAD_H + this.editingRow * ROW_H - this.offsetY,
-          isNumber: this.editingCol !== 1,
-          onValueChange: (text: string) => {
-            this.editingText = text;
-          },
-          onDone: () => {
-            this.editingRow = -1;
-            this.editingCol = -1;
-          }
-        })
-      }
 
       // 列操作菜单
       if (this.colMenuOpen) {
