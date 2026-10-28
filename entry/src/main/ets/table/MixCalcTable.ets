@@ -439,10 +439,11 @@ export struct MixCalcTable {
     if (this.isWarningCell(data, column, rowIndex)) {
       return '#FFC64B';
     }
-    if (column >= 5 && column <= 8 && data.shedCount > 0 && data.switchRatio > 0
-      && this.isSwitchTargetCell(data, column)) {
-      return '#F0F8F0';
+    // 不能输入的格子（还没填棚数）保持灰色
+    if (column >= 4 && column <= 8 && data.shedCount <= 0) {
+      return '#F0F0F0';
     }
+    // 换料目标格不再单独上浅绿，和其它空格同色
     return '#FFFFFF';
   }
 

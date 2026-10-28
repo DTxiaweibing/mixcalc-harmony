@@ -409,23 +409,24 @@ struct Index {
 
   @Builder
   menuRow(item: MenuItem, isLast: boolean) {
-    Button(item.label)
-      .type(ButtonType.Normal)
-      .width('100%')
-      .height(39)
-      .borderRadius(0)
-      .backgroundColor(Color.Transparent)
-      .fontSize(18)
-      .fontColor(item.label.startsWith('版本') ? '#999999' : '#333333')
-      .stateEffect(!item.label.startsWith('版本'))
-      .enabled(!item.label.startsWith('版本'))
-      .onClick(() => {
-        if (item.label !== '批次切换') {
-          this.menuOpen = false;
-          this.batchMenuOpen = false;
-        }
-        item.action();
-      })
+    Row() {
+      Text(item.label)
+        .fontSize(18)
+        .fontColor(item.label.startsWith('版本') ? '#999999' : '#333333')
+        .textAlign(TextAlign.Center)
+        .width('100%')
+    }
+    .width('100%')
+    .height(39)
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(Color.Transparent)
+    .onClick(() => {
+      if (item.label !== '批次切换') {
+        this.menuOpen = false;
+        this.batchMenuOpen = false;
+      }
+      item.action();
+    })
     if (!isLast) {
       Divider()
         .strokeWidth(1)
