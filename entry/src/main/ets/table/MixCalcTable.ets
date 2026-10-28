@@ -682,24 +682,43 @@ export struct MixCalcTable {
         this.padNum('7')
         this.padNum('8')
         this.padNum('9')
-        this.padFn('.', () => {
-          this.padDot();
-        })
+        if (this.editingCol === 1) {
+          this.padFn('-', () => {
+            this.padInput('-');
+          })
+        } else {
+          this.padFn('.', () => {
+            this.padDot();
+          })
+        }
       }
       .width('100%')
       Row() {
-        this.padNum(this.editingCol === 1 ? '-' : '0')
         this.padNum('0')
         this.padNum('00')
-        this.padFn('下一步', () => {
-          this.nextCell();
-        })
+        this.padNext()
       }
       .width('100%')
     }
     .width('100%')
-    .padding({ left: 4, right: 4, top: 4, bottom: 4 })
+    .padding({ left: 4, right: 4, top: 4, bottom: 30 })
     .backgroundColor('#ECECEC')
+  }
+
+  @Builder
+  padNext() {
+    Text('下一步')
+      .layoutWeight(2)
+      .height(52)
+      .margin(3)
+      .fontSize(16)
+      .fontColor(Color.White)
+      .textAlign(TextAlign.Center)
+      .backgroundColor('#2D8C42')
+      .borderRadius(6)
+      .onClick(() => {
+        this.nextCell();
+      })
   }
 
   @Builder
@@ -850,10 +869,14 @@ export struct MixCalcTable {
     }
     const x: number = this.columnLeft(this.editingCol);
     const w: number = WIDTHS[this.editingCol];
-    if (x < 0) {
-      this.offsetX = this.offsetX + x;
-    } else if (x + w > this.viewW) {
-      this.offsetX = this.offsetX + (x + w - this.viewW);
+    if (!this.isFixed(this.editingCol)) {
+      // 非固定列不能钻到冻结列底下（否则输入框会盖在“序号”上）
+      const fw: number = this.frozenWidth();
+      if (x < fw) {
+        this.offsetX = this.offsetX - (fw - x);
+      } else if (x + w > this.viewW) {
+        this.offsetX = this.offsetX + (x + w - this.viewW);
+      }
     }
     this.clampOffsets();
   }
@@ -1256,8 +1279,7 @@ export struct MixCalcTable {
 
   build() {
     Stack() {
-      Column() {
-        // 表头
+      Column() {        // 表头
         Stack({ alignContent: Alignment.TopStart }) {
           Row() {
             ForEach(this.normalIndices(), (col: number) => {
@@ -1585,5 +1607,7 @@ export struct MixCalcTable {
     }
     .width('100%')
     .height('100%')
+    // 自绘键盘占住底部，表格（含表尾）整体上移，表尾就顶在键盘上面
+    .padding({ bottom: this.editingRow >= 0 ? 266 : 0 })
   }
 }
