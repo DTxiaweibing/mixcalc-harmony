@@ -779,7 +779,6 @@ export struct MixCalcTable {
     this.editorText = text;
     this.editingText = text;
     this.editLive(text);
-    this.editorCtrl.caretPosition(text.length);
   }
 
   private editableColumns(): number[] {
@@ -1378,6 +1377,11 @@ export struct MixCalcTable {
         .height(FOOT_H)
         .backgroundColor('#EAF3EC')
         .clip(true)
+
+        // 自绘数字键盘是布局的一部分：表尾正好压在它上面，不留缝也不遮挡
+        if (this.editingRow >= 0 && this.editingCol >= 2) {
+          this.numKeypad()
+        }
       }
       .width('100%')
       .height('100%')
@@ -1406,59 +1410,67 @@ export struct MixCalcTable {
       // 单元格编辑器：放在最外层 Stack（和表体平级），
       // 表体重排不会重建它，焦点和键盘才稳；坐标自己按 表头高 + 行号*行高 - 滚动量 算
       if (this.editingRow >= 0 && this.editingCol >= 0) {
-        TextInput({ text: this.editorText, controller: this.editorCtrl })
-          .id('cellEditor')
-          .type(this.editingCol === 1 ? InputType.Normal : InputType.NUMBER_DECIMAL)
-          .customKeyboard(this.numKeypad())
-          .width(WIDTHS[this.editingCol])
-          .height(ROW_H)
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#000000')
-          .textAlign(TextAlign.Center)
-          .maxLines(1)
-          .padding(0)
-          .borderRadius(0)
-          // 只允许数字和小数点；棚号那一列额外允许“-”（区间 1-40 要用）
-          .inputFilter(this.editingCol === 1 ? '[0-9.-]' : '[0-9.]')
-          .backgroundColor(Color.White)
-          .border({ width: 1.5, color: '#2D8C42' })
-          .caretColor('#2D8C42')
-          .position({
-            x: this.columnLeft(this.editingCol),
-            y: HEAD_H + this.editingRow * ROW_H - this.offsetY
-          })
-          .zIndex(5)
-          .defaultFocus(true)
-          .enableKeyboardOnFocus(true)
-          .enterKeyType(EnterKeyType.Next)
-          .onChange((text: string) => {
-            this.editingText = text;
-            if (this.suppressChange) {
-              this.suppressChange = false;
-              return;
-            }
-            this.editLive(text);
-          })
-          .onSubmit(() => {
-            this.nextCell();
-          })
-          .onKeyEvent((event: KeyEvent) => {
-            // 键盘上的「下一步/回车」先在这里吃掉，别让输入框自己处理（它会顺手收键盘）
-            if (event.type === KeyType.Down
-              && (event.keyCode === 2054 || event.keyCode === 2119)) {
+        if (this.editingCol === 1) {
+          // 棚号可能带文字，这一列用系统键盘
+          TextInput({ text: this.editorText, controller: this.editorCtrl })
+            .id('cellEditor')
+            .type(InputType.Normal)
+            .width(WIDTHS[this.editingCol])
+            .height(ROW_H)
+            .fontSize(12)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#000000')
+            .textAlign(TextAlign.Center)
+            .maxLines(1)
+            .padding(0)
+            .borderRadius(0)
+            .backgroundColor(Color.White)
+            .border({ width: 1.5, color: '#2D8C42' })
+            .caretColor('#2D8C42')
+            .position({
+              x: this.columnLeft(this.editingCol),
+              y: HEAD_H + this.editingRow * ROW_H - this.offsetY
+            })
+            .zIndex(5)
+            .defaultFocus(true)
+            .enableKeyboardOnFocus(true)
+            .enterKeyType(EnterKeyType.Next)
+            .onChange((text: string) => {
+              this.editingText = text;
+              this.editorText = text;
+              if (this.suppressChange) {
+                this.suppressChange = false;
+                return;
+              }
+              this.editLive(text);
+            })
+            .onSubmit(() => {
               this.nextCell();
-              return true;
-            }
-            return false;
-          })
-          .onBlur(() => {
-            // 换格时上一次的 blur 会晚一步到达，别把新格连同键盘一起关掉
-            if (Date.now() - this.editorOpenedAt < 400) {
-              return;
-            }
-            this.finishEdit();
-          })
+            })
+            .onBlur(() => {
+              if (Date.now() - this.editorOpenedAt < 400) {
+                return;
+              }
+              this.finishEdit();
+            })
+        } else {
+          // 数字列：只用自绘键盘，不放可编辑控件，系统输入法根本不参与
+          Text(this.editorText)
+            .width(WIDTHS[this.editingCol])
+            .height(ROW_H)
+            .fontSize(12)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#000000')
+            .textAlign(TextAlign.Center)
+            .maxLines(1)
+            .backgroundColor(Color.White)
+            .border({ width: 1.5, color: '#2D8C42' })
+            .position({
+              x: this.columnLeft(this.editingCol),
+              y: HEAD_H + this.editingRow * ROW_H - this.offsetY
+            })
+            .zIndex(5)
+        }
       }
 
       // 列操作菜单
@@ -1607,7 +1619,5 @@ export struct MixCalcTable {
     }
     .width('100%')
     .height('100%')
-    // 自绘键盘占住底部，表格（含表尾）整体上移，表尾就顶在键盘上面
-    .padding({ bottom: this.editingRow >= 0 ? 266 : 0 })
   }
 }
