@@ -297,6 +297,13 @@ struct Index {
   }
 
   private setFermentOption(which: number): void {
+    // 先解除平均钉住，再改开关：否则 @Watch 会先用旧平均把料量重分一遍
+    if (which === 2 || which === 3) {
+      const rows: FeedData[] = this.currentBatch().rows;
+      for (let n = 0; n < rows.length; n++) {
+        rows[n].isAverageManuallyModified = false;
+      }
+    }
     const batch: Batch = this.currentBatch();
     let changed: boolean = false;
     if (which === 0 && !this.fermentWater) {
@@ -320,14 +327,6 @@ struct Index {
       this.toast(t(this.lang, 'ferment.nochange'));
       return;
     }
-    // 改「是否参与算料」会改变平均口径：解除手改/换料造成的平均钉住，按新口径重算
-    if (which === 2 || which === 3) {
-      const rows: FeedData[] = this.currentBatch().rows;
-      for (let n = 0; n < rows.length; n++) {
-        rows[n].isAverageManuallyModified = false;
-      }
-    }
-    this.saveAll();
     const status: string = (this.fermentWater ? t(this.lang, 'ferment.inWater') : t(this.lang, 'ferment.exWater'))
       + '，' + (this.fermentAvg ? t(this.lang, 'ferment.inAvg') : t(this.lang, 'ferment.exAvg'));
     this.toast(t(this.lang, 'ferment.status').replace('%s', status));
