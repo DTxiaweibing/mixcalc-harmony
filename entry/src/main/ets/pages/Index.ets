@@ -1,7 +1,7 @@
 import { MixCalcTable } from '../table/MixCalcTable';
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
-import { promptAction, router, display } from '@kit.ArkUI';
+import { promptAction, router, display, window } from '@kit.ArkUI';
 import { Batch } from '../model/Batch';
 import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
@@ -71,6 +71,23 @@ struct Index {
       })
     ];
   }
+  onPageShow(): void {
+    this.applyHomeSystemBars();
+  }
+
+  private applyHomeSystemBars(): void {
+    window.getLastWindow(getContext(this)).then((win) => {
+      win.setWindowSystemBarProperties({
+        statusBarColor: '#1F6B30',
+        statusBarContentColor: '#FFFFFF',
+        navigationBarColor: '#FFFFFF',
+        navigationBarContentColor: '#000000'
+      });
+    }).catch((err: Error) => {
+      console.error('home system bars failed: ' + err.message);
+    });
+  }
+
   async aboutToAppear(): Promise<void> {
     try {
       const ctx = getContext(this) as common.UIAbilityContext;
