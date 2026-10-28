@@ -412,7 +412,7 @@ struct Index {
     Row() {
       Text(item.label)
         .fontSize(18)
-        .fontColor(item.label.startsWith('版本') ? '#999999' : '#333333')
+        .fontColor('#333333')
         .textAlign(TextAlign.Center)
         .width('100%')
     }

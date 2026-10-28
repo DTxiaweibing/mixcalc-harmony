@@ -1,5 +1,6 @@
 import { FeedData } from '../model/FeedData';
 import { t } from '../common/Strings';
+import { promptAction } from '@kit.ArkUI';
 
 const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
 const HEAD_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
@@ -914,11 +915,37 @@ export struct MixCalcTable {
     this.clampOffsets();
   }
 
+  // 这一行是否已经有输入（棚号或棚数填过）
+  private rowHasInput(r: number): boolean {
+    const d: FeedData = this.rows[r];
+    const sn: string = d.shedNumber === undefined || d.shedNumber === null ? '' : d.shedNumber;
+    return sn.trim().length > 0 || d.shedCount > 0;
+  }
+
+  // 从第一行开始找第一行还没输入的
+  private firstEmptyRow(): number {
+    for (let i = 0; i < this.rows.length; i++) {
+      if (!this.rowHasInput(i)) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
   private openEditor(row: number, column: number): void {
     if (!this.isEditableColumn(column) || row < 0 || row >= this.rows.length) {
       return;
     }
     if (!this.isCellEnabled(this.rows[row], column)) {
+      return;
+    }
+    // 只能从上往下按顺序填：前面还有空行时不允许跳到后面那行
+    const firstEmpty: number = this.firstEmptyRow();
+    if (firstEmpty >= 0 && row > firstEmpty) {
+      promptAction.showToast({
+        message: t(this.lang, 'toast.fillOrder').replace('%d', (firstEmpty + 1).toString()),
+        duration: 2000
+      });
       return;
     }
     // 已经在编辑这一格：只把焦点抢回来，不重置文本
