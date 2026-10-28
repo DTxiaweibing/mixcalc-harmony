@@ -763,8 +763,8 @@ export struct MixCalcTable {
         }
         .width('100%')
         Row() {
-          this.padNum('0')
           this.padNum('00')
+          this.padNum('0')
           this.padFn('.', () => {
             this.padDot();
           })
