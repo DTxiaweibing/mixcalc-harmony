@@ -735,8 +735,8 @@ export struct MixCalcTable {
       .height('100%')
     }
     .width('100%')
-    .height(266)
-    .padding({ left: 4, right: 4, top: 4, bottom: 30 })
+    .height(240)
+    .padding({ left: 4, right: 4, top: 4, bottom: 4 })
     .backgroundColor('#ECECEC')
   }
 
