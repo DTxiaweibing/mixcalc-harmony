@@ -179,6 +179,17 @@ export struct MixCalcTable {
   @State viewW: number = 0;
   @State viewH: number = 0;
   @State version: number = 0;
+  // 编辑态：只有坐标是 @State（决定输入框挂不挂），
+  // 文本用普通字段，敲键盘不会触发重排，光标才稳。
+  @State editingRow: number = -1;
+  @State editingCol: number = -1;
+  private editingText: string = '';
+  private editingSeed: string = '';
+  private editDirty: boolean = false;
+  // 换格时旧输入框的 blur 会晚一步到达，别让它把新开的编辑器关掉
+  private editorOpenedAt: number = 0;
+  // 程序化改文本（换格塞初值）时压住 onChange，不然一换格就当用户输入提交了
+  private suppressChange: boolean = false;
 
   @State colMenuOpen: boolean = false;
   @State colMenuX: number = 0;
@@ -544,7 +555,7 @@ export struct MixCalcTable {
     first.recalculateDerivedOnly(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
   }
 
-  private applyEdit(text: string): void {
+  private applyEdit(text: string, persist: boolean = true): void {
     if (this.editRow < 0 || this.editCol < 0) {
       return;
     }
@@ -607,7 +618,92 @@ export struct MixCalcTable {
     }
     this.recomputeFirstRow();
     this.version = this.version + 1;
-    this.onChanged();
+    if (persist) {
+      this.onChanged();
+    }
+  }
+
+  // 对齐安卓 afterTextChanged：敲一个字符就重算（边输边算），但不落盘
+  private editLive(text: string): void {
+    this.editDirty = true;
+    this.applyEdit(text, false);
+  }
+
+  // 收尾：只有真改过才提交落盘；只点一下没输入不写脏数据（安卓 dirty 标记）
+  private finishEdit(): void {
+    if (this.editingRow < 0 || this.editingCol < 0) {
+      return;
+    }
+    const text: string = this.editingText;
+    const wasDirty: boolean = this.editDirty;
+    this.editingRow = -1;
+    this.editingCol = -1;
+    this.editingSeed = '';
+    this.editDirty = false;
+    if (wasDirty) {
+      this.applyEdit(text, true);
+    }
+  }
+
+  private editableColumns(): number[] {
+    const result: number[] = [];
+    const fixed: number[] = this.fixedIndices();
+    for (let i = 0; i < fixed.length; i++) {
+      if (this.isEditableColumn(fixed[i])) {
+        result.push(fixed[i]);
+      }
+    }
+    const normal: number[] = this.normalIndices();
+    for (let i = 0; i < normal.length; i++) {
+      if (this.isEditableColumn(normal[i])) {
+        result.push(normal[i]);
+      }
+    }
+    return result;
+  }
+
+  private nextCell(): void {
+    if (this.editDirty) {
+      this.applyEdit(this.editingText, true);
+    }
+    this.editDirty = false;
+    const cols: number[] = this.editableColumns();
+    const col: number = this.editingCol;
+    const row: number = this.editingRow;
+    if (cols.length === 0) {
+      return;
+    }
+    let pos: number = cols.indexOf(col);
+    if (pos < 0) {
+      pos = 0;
+    }
+    let nextRow: number = row;
+    let nextPos: number = pos + 1;
+    if (nextPos >= cols.length) {
+      nextRow = row + 1;
+      nextPos = 0;
+    }
+    if (nextRow >= this.rows.length) {
+      return;
+    }
+    // 直接从旧格跳到新格，不经过“关闭”那一步：
+    // 输入框节点不销毁，焦点和键盘才不会掉（否则键盘一收就全退了）
+    const targetCol: number = cols[nextPos];
+    this.editRow = nextRow;
+    this.editCol = targetCol;
+    this.editingSeed = this.currentValue(nextRow, targetCol);
+    this.editingText = this.editingSeed;
+    this.editingRow = nextRow;
+    this.editingCol = targetCol;
+    this.editorOpenedAt = Date.now();
+    this.suppressChange = true;
+    setTimeout(() => {
+      this.suppressChange = false;
+    }, 400);
+    focusControl.requestFocus('cellEditor');
+    setTimeout(() => {
+      focusControl.requestFocus('cellEditor');
+    }, 40);
   }
 
   private openEditor(row: number, column: number): void {
@@ -617,12 +713,33 @@ export struct MixCalcTable {
     if (!this.isCellEnabled(this.rows[row], column)) {
       return;
     }
+    // 已经在编辑这一格：只把焦点抢回来，不重置文本
+    if (this.editingRow === row && this.editingCol === column) {
+      focusControl.requestFocus('cellEditor');
+      return;
+    }
+    // 换格前先把上一格提交掉（对齐安卓 commitInternal，键盘不闪）
+    if (this.editingRow >= 0 && this.editDirty) {
+      this.applyEdit(this.editingText, true);
+    }
+    this.editDirty = false;
     this.editRow = row;
     this.editCol = column;
     this.editorTitle = this.headLabel(column) + ' · ' + t(this.lang, 'dlg.row').replace('%d', (row + 1).toString());
     this.editorValue = this.currentValue(row, column);
     this.editorIsNumber = column !== 1;
-    this.editorController.open();
+    this.editingSeed = this.currentValue(row, column);
+    this.editingText = this.editingSeed;
+    this.editingRow = row;
+    this.editingCol = column;
+    this.editorOpenedAt = Date.now();
+    this.suppressChange = true;
+    setTimeout(() => {
+      this.suppressChange = false;
+    }, 400);
+    setTimeout(() => {
+      focusControl.requestFocus('cellEditor');
+    }, 60);
   }
 
   // ===== 列操作菜单 =====
@@ -1036,6 +1153,43 @@ export struct MixCalcTable {
           .width(this.frozenWidth())
           .position({ x: 0, y: -this.offsetY })
           .zIndex(1)
+          if (this.editingRow >= 0 && this.editingCol >= 0) {
+            // 全表唯一输入框，挂在表体 Stack 里，坐标每次重排都算一遍：
+            // 拖动表格时它跟着格子走（对齐安卓 CellEditorOverlay.layoutChild）
+            TextInput({ text: this.editingSeed })
+              .id('cellEditor')
+              .type(this.editingCol === 1 ? InputType.Normal : InputType.NUMBER_DECIMAL)
+              .width(WIDTHS[this.editingCol])
+              .height(ROW_H)
+              .fontSize(12)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#000000')
+              .textAlign(TextAlign.Center)
+              .maxLines(1)
+              .padding(0)
+              .borderRadius(0)
+              .backgroundColor(Color.White)
+              .border({ width: 1.5, color: '#2D8C42' })
+              .caretColor('#2D8C42')
+              .position({ x: this.columnLeft(this.editingCol), y: this.editingRow * ROW_H - this.offsetY })
+              .zIndex(5)
+              .defaultFocus(true)
+              .enterKeyType(EnterKeyType.Next)
+              .onChange((text: string) => {
+                this.editingText = text;
+                if (this.suppressChange) {
+                  this.suppressChange = false;
+                  return;
+                }
+                this.editLive(text);
+              })
+              .onSubmit(() => {
+                this.nextCell();
+              })
+              .onBlur(() => {
+                this.finishEdit();
+              })
+          }
         }
         .layoutWeight(1)
         .width('100%')
