@@ -1,7 +1,7 @@
 import { MixCalcTable } from '../table/MixCalcTable';
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
-import { promptAction, router, display, window } from '@kit.ArkUI';
+import { promptAction, router, display, window, KeyboardAvoidMode } from '@kit.ArkUI';
 import { Batch } from '../model/Batch';
 import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
@@ -90,6 +90,11 @@ struct Index {
   }
 
   async aboutToAppear(): Promise<void> {
+    // 系统键盘弹出时把窗口压扁（而不是整体上推），表尾才会露在键盘上面
+    try {
+      this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE);
+    } catch (e) {
+    }
     try {
       const ctx = getContext(this) as common.UIAbilityContext;
       this.store = await preferences.getPreferences(ctx, PREF_NAME);

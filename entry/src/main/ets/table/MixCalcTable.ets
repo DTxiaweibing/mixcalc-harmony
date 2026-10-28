@@ -318,15 +318,9 @@ export struct MixCalcTable {
     return Math.max(0, this.bodyHeight() - this.viewH);
   }
 
-  // 编辑器横坐标：非冻结列不允许压到冻结列（序号）上面
+  // 编辑器横坐标：和格子用同一套坐标，不做夹紧（夹紧会让它停在别的格子上“悬浮”）
   private editorX(): number {
-    const x: number = this.columnLeft(this.editingCol);
-    if (this.isFixed(this.editingCol)) {
-      return x;
-    }
-    const fw: number = this.frozenWidth();
-    const w: number = WIDTHS[this.editingCol];
-    return Math.max(fw, Math.min(x, this.viewW - w));
+    return this.columnLeft(this.editingCol);
   }
 
   private clampOffsets(): void {
@@ -342,7 +336,8 @@ export struct MixCalcTable {
       if (this.editingCol >= 0 && !this.isFixed(this.editingCol)) {
         const x: number = this.columnLeft(this.editingCol);
         const w: number = WIDTHS[this.editingCol];
-        if (x + w <= this.frozenWidth() || x >= this.viewW) {
+        // 只要这格横向不再完整可见（滚到冻结列底下或滚出右边），立刻收编辑
+        if (x < this.frozenWidth() || x + w > this.viewW) {
           this.finishEdit();
         }
       }
