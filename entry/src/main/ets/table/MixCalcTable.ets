@@ -439,9 +439,6 @@ export struct MixCalcTable {
     if (this.isWarningCell(data, column, rowIndex)) {
       return '#FFC64B';
     }
-    if (column >= 4 && column <= 8 && data.shedCount <= 0) {
-      return '#F0F0F0';
-    }
     if (column >= 5 && column <= 8 && data.shedCount > 0 && data.switchRatio > 0
       && this.isSwitchTargetCell(data, column)) {
       return '#F0F8F0';
