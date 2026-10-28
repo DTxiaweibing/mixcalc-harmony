@@ -40,6 +40,7 @@ struct Index {
   @State screenW: number = 360;
   @State settingsOpen: boolean = false;
   @State settingsVersion: number = 0;
+  @State refreshTick: number = 0;
   @State lang: string = 'zh';
   @State waterPct: number = 20;
   @State fermentWater: boolean = false;
@@ -297,13 +298,6 @@ struct Index {
   }
 
   private setFermentOption(which: number): void {
-    // 先解除平均钉住，再改开关：否则 @Watch 会先用旧平均把料量重分一遍
-    if (which === 2 || which === 3) {
-      const rows: FeedData[] = this.currentBatch().rows;
-      for (let n = 0; n < rows.length; n++) {
-        rows[n].isAverageManuallyModified = false;
-      }
-    }
     const batch: Batch = this.currentBatch();
     let changed: boolean = false;
     if (which === 0 && !this.fermentWater) {
@@ -327,10 +321,23 @@ struct Index {
       this.toast(t(this.lang, 'ferment.nochange'));
       return;
     }
+    if (which === 2 || which === 3) {
+      const rows: FeedData[] = this.currentBatch().rows;
+      for (let n = 0; n < rows.length; n++) {
+        rows[n].isAverageManuallyModified = false;
+        rows[n].calculateAverage(this.fermentAvg);
+      }
+      this.refreshTick = this.refreshTick + 1;
+      this.saveAll();
+      this.toast(this.fermentAvg ? t(this.lang, 'ferment.inAvg') : t(this.lang, 'ferment.exAvg'));
+      return;
+    }
+    this.saveAll();
     const status: string = (this.fermentWater ? t(this.lang, 'ferment.inWater') : t(this.lang, 'ferment.exWater'))
       + '，' + (this.fermentAvg ? t(this.lang, 'ferment.inAvg') : t(this.lang, 'ferment.exAvg'));
     this.toast(t(this.lang, 'ferment.status').replace('%s', status));
   }
+
 
   private handleColumnAction(action: string, index: number, vis: boolean[], fix: boolean[]): void {
     if (this.batches.length === 0) {
@@ -457,6 +464,7 @@ struct Index {
             waterPercentage: this.waterPct,
             fermentedInWater: this.fermentWater,
             fermentedInAverage: this.fermentAvg,
+            refreshTick: this.refreshTick,
             lang: this.lang,
             initVisible: this.visibleMask(),
             initFixed: this.fixedMask(),

@@ -168,6 +168,7 @@ export struct MixCalcTable {
   @State vis: boolean[] = [];
   @State fix: boolean[] = [];
 
+  @Prop @Watch('onRefreshTick') refreshTick: number = 0;
   @Prop lang: string = 'zh';
   @Prop @Watch('onSettingsChanged') waterPercentage: number = 20;
   @Prop @Watch('onSettingsChanged') fermentedInWater: boolean = false;
@@ -879,6 +880,11 @@ export struct MixCalcTable {
 
   aboutToDisappear(): void {
     this.stopFling();
+  }
+
+  onRefreshTick(): void {
+    // 只刷新显示，不重算料量（用于“参与算料”切换：平均变了、料量不变）
+    this.version = this.version + 1;
   }
 
   onSettingsChanged(): void {
