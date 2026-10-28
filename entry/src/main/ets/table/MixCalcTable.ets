@@ -154,6 +154,54 @@ struct ConfirmDialog {
   }
 }
 
+@CustomDialog
+struct HintDialog {
+  controller?: CustomDialogController;
+  title: string = '';
+  message: string = '';
+  confirmText: string = '知道了';
+
+  build() {
+    Column() {
+      Text(this.title)
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#000000')
+        .width('100%')
+        .textAlign(TextAlign.Center)
+        .padding({ top: 16, bottom: 12, left: 16, right: 16 })
+
+      Divider().strokeWidth(1).color('#E0E0E0')
+
+      Text(this.message)
+        .fontSize(15)
+        .fontColor('#333333')
+        .textAlign(TextAlign.Center)
+        .lineHeight(23)
+        .padding({ top: 20, bottom: 20, left: 20, right: 20 })
+
+      Divider().strokeWidth(1).color('#E0E0E0')
+
+      Button(this.confirmText)
+        .type(ButtonType.Normal)
+        .width('100%')
+        .height(48)
+        .borderRadius(0)
+        .backgroundColor(Color.Transparent)
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#2D8C42')
+        .onClick(() => {
+          this.controller?.close();
+        })
+    }
+    .width('70%')
+    .backgroundColor(Color.White)
+    .borderRadius(12)
+    .clip(true)
+  }
+}
+
 @Component
 export struct MixCalcTable {
   rows: FeedData[] = [];
@@ -248,6 +296,18 @@ export struct MixCalcTable {
       onConfirm: () => {
         this.resetAll();
       }
+    }),
+    autoCancel: true,
+    customStyle: true
+  });
+
+  private hintTitle: string = '';
+  private hintMessage: string = '';
+  private hintController: CustomDialogController = new CustomDialogController({
+    builder: HintDialog({
+      title: this.hintTitle,
+      message: this.hintMessage,
+      confirmText: '知道了'
     }),
     autoCancel: true,
     customStyle: true
@@ -942,10 +1002,9 @@ export struct MixCalcTable {
     // 只能从上往下按顺序填：前面还有空行时不允许跳到后面那行
     const firstEmpty: number = this.firstEmptyRow();
     if (firstEmpty >= 0 && row > firstEmpty) {
-      promptAction.showToast({
-        message: t(this.lang, 'toast.fillOrder').replace('%d', (firstEmpty + 1).toString()),
-        duration: 2000
-      });
+      this.hintTitle = t(this.lang, 'order.title');
+      this.hintMessage = t(this.lang, 'order.message').replace('%d', (firstEmpty + 1).toString());
+      this.hintController.open();
       return;
     }
     // 已经在编辑这一格：只把焦点抢回来，不重置文本
