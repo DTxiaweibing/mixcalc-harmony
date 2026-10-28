@@ -12,6 +12,7 @@ export struct CellEditor {
   isNumber: boolean = true;
   onValueChange: (text: string) => void = () => {};
   onDone: () => void = () => {};
+  private finished: boolean = false;
 
   aboutToAppear(): void {
     // 挂载后连续尝试抢焦点，避免第一次点击只显示输入框不弹键盘
@@ -21,6 +22,15 @@ export struct CellEditor {
     setTimeout(() => {
       focusControl.requestFocus('cellEditor');
     }, 150);
+  }
+
+  /** 回车与失焦都会触发，只允许提交一次，避免第二次用空串清空格子 */
+  private finish(): void {
+    if (this.finished) {
+      return;
+    }
+    this.finished = true;
+    this.onDone();
   }
 
   build() {
@@ -44,10 +54,10 @@ export struct CellEditor {
         this.onValueChange(text);
       })
       .onSubmit(() => {
-        this.onDone();
+        this.finish();
       })
       .onBlur(() => {
-        this.onDone();
+        this.finish();
       })
   }
 }
