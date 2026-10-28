@@ -185,6 +185,7 @@ export struct MixCalcTable {
   @State editingCol: number = -1;
   private editingText: string = '';
   private editingSeed: string = '';
+  @State editorText: string = '';
   private editDirty: boolean = false;
   // 换格时旧输入框的 blur 会晚一步到达，别让它把新开的编辑器关掉
   private editorOpenedAt: number = 0;
@@ -654,6 +655,114 @@ export struct MixCalcTable {
     }
   }
 
+  // 数字键盘（自己画，不用系统输入法）：回车键不再由输入法处理，
+  // 换格时键盘不会收起来再弹，也不会闪
+  @Builder
+  numKeypad() {
+    Column() {
+      Row() {
+        this.padNum('1')
+        this.padNum('2')
+        this.padNum('3')
+        this.padFn('\u232B', () => {
+          this.padBackspace();
+        })
+      }
+      .width('100%')
+      Row() {
+        this.padNum('4')
+        this.padNum('5')
+        this.padNum('6')
+        this.padFn('清空', () => {
+          this.padClear();
+        })
+      }
+      .width('100%')
+      Row() {
+        this.padNum('7')
+        this.padNum('8')
+        this.padNum('9')
+        this.padFn('.', () => {
+          this.padDot();
+        })
+      }
+      .width('100%')
+      Row() {
+        this.padNum(this.editingCol === 1 ? '-' : '0')
+        this.padNum('0')
+        this.padNum('00')
+        this.padFn('下一步', () => {
+          this.nextCell();
+        })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding({ left: 4, right: 4, top: 4, bottom: 4 })
+    .backgroundColor('#ECECEC')
+  }
+
+  @Builder
+  padNum(label: string) {
+    Text(label)
+      .layoutWeight(1)
+      .height(52)
+      .margin(3)
+      .fontSize(22)
+      .fontColor('#000000')
+      .textAlign(TextAlign.Center)
+      .backgroundColor(Color.White)
+      .borderRadius(6)
+      .onClick(() => {
+        this.padInput(label);
+      })
+  }
+
+  @Builder
+  padFn(label: string, action: () => void) {
+    Text(label)
+      .layoutWeight(1)
+      .height(52)
+      .margin(3)
+      .fontSize(label === '下一步' ? 16 : 18)
+      .fontColor(label === '下一步' ? Color.White : '#000000')
+      .textAlign(TextAlign.Center)
+      .backgroundColor(label === '下一步' ? '#2D8C42' : '#D8D8D8')
+      .borderRadius(6)
+      .onClick(action)
+  }
+
+  private padInput(ch: string): void {
+    const next: string = this.editorText + ch;
+    this.applyPadText(next);
+  }
+
+  private padDot(): void {
+    if (this.editingCol === 1) {
+      return;
+    }
+    if (this.editorText.indexOf('.') >= 0) {
+      return;
+    }
+    this.applyPadText(this.editorText + '.');
+  }
+
+  private padBackspace(): void {
+    const t: string = this.editorText;
+    this.applyPadText(t.length <= 1 ? '' : t.substring(0, t.length - 1));
+  }
+
+  private padClear(): void {
+    this.applyPadText('');
+  }
+
+  private applyPadText(text: string): void {
+    this.editorText = text;
+    this.editingText = text;
+    this.editLive(text);
+    this.editorCtrl.caretPosition(text.length);
+  }
+
   private editableColumns(): number[] {
     const result: number[] = [];
     const fixed: number[] = this.fixedIndices();
@@ -717,6 +826,7 @@ export struct MixCalcTable {
     this.editCol = column;
     this.editingSeed = this.currentValue(row, column);
     this.editingText = this.editingSeed;
+    this.editorText = this.editingSeed;
     this.editingRow = row;
     this.editingCol = column;
     this.editorOpenedAt = Date.now();
@@ -724,14 +834,6 @@ export struct MixCalcTable {
     setTimeout(() => {
       this.suppressChange = false;
     }, 400);
-    // 输入框节点是稳的（在最外层 Stack），这里补抢焦点，键盘跟着回来
-    focusControl.requestFocus('cellEditor');
-    setTimeout(() => {
-      focusControl.requestFocus('cellEditor');
-    }, 60);
-    setTimeout(() => {
-      focusControl.requestFocus('cellEditor');
-    }, 180);
     this.ensureEditorVisible();
   }
 
@@ -780,6 +882,7 @@ export struct MixCalcTable {
     this.editorIsNumber = column !== 1;
     this.editingSeed = this.currentValue(row, column);
     this.editingText = this.editingSeed;
+    this.editorText = this.editingSeed;
     this.editingRow = row;
     this.editingCol = column;
     this.editorOpenedAt = Date.now();
@@ -1281,9 +1384,10 @@ export struct MixCalcTable {
       // 单元格编辑器：放在最外层 Stack（和表体平级），
       // 表体重排不会重建它，焦点和键盘才稳；坐标自己按 表头高 + 行号*行高 - 滚动量 算
       if (this.editingRow >= 0 && this.editingCol >= 0) {
-        TextInput({ text: this.editingSeed, controller: this.editorCtrl })
+        TextInput({ text: this.editorText, controller: this.editorCtrl })
           .id('cellEditor')
           .type(this.editingCol === 1 ? InputType.Normal : InputType.NUMBER_DECIMAL)
+          .customKeyboard(this.numKeypad())
           .width(WIDTHS[this.editingCol])
           .height(ROW_H)
           .fontSize(12)
