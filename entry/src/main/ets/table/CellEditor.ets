@@ -12,6 +12,7 @@ export struct CellEditor {
   isNumber: boolean = true;
   onValueChange: (text: string) => void = () => {};
   onDone: () => void = () => {};
+  onNext: () => void = () => {};
   private finished: boolean = false;
 
   aboutToAppear(): void {
@@ -49,12 +50,16 @@ export struct CellEditor {
       .position({ x: this.xVp, y: this.yVp })
       .zIndex(5)
       .defaultFocus(true)
-      .enterKeyType(EnterKeyType.Done)
+      .enterKeyType(EnterKeyType.Next)
       .onChange((text: string) => {
         this.onValueChange(text);
       })
       .onSubmit(() => {
-        this.finish();
+        if (this.finished) {
+          return;
+        }
+        this.finished = true;
+        this.onNext();
       })
       .onBlur(() => {
         this.finish();

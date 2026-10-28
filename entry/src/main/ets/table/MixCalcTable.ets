@@ -614,6 +614,50 @@ export struct MixCalcTable {
     this.onChanged();
   }
 
+  /** 按可见顺序取可编辑列（1..8），用于跳格 */
+  private editableColumns(): number[] {
+    const result: number[] = [];
+    const fixed: number[] = this.fixedIndices();
+    for (let i = 0; i < fixed.length; i++) {
+      if (this.isEditableColumn(fixed[i])) {
+        result.push(fixed[i]);
+      }
+    }
+    const normal: number[] = this.normalIndices();
+    for (let i = 0; i < normal.length; i++) {
+      if (this.isEditableColumn(normal[i])) {
+        result.push(normal[i]);
+      }
+    }
+    return result;
+  }
+
+  /** 提交当前值并跳到下一格：右边一格；行末则下一行首格；到底则结束 */
+  private nextCell(): void {
+    this.applyEdit(this.editingText);
+    const cols: number[] = this.editableColumns();
+    const col: number = this.editingCol;
+    const row: number = this.editingRow;
+    this.editingRow = -1;
+    this.editingCol = -1;
+    if (cols.length === 0) {
+      return;
+    }
+    let pos: number = cols.indexOf(col);
+    if (pos < 0) {
+      pos = 0;
+    }
+    let nextRow: number = row;
+    let nextPos: number = pos + 1;
+    if (nextPos >= cols.length) {
+      nextRow = row + 1;
+      nextPos = 0;
+    }
+    if (nextRow >= this.rows.length) {
+      return;
+    }
+    this.openEditor(nextRow, cols[nextPos]);
+  }
   private openEditor(row: number, column: number): void {
     if (!this.isEditableColumn(column) || row < 0 || row >= this.rows.length) {
       return;
