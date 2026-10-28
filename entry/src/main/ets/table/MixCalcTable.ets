@@ -172,7 +172,7 @@ export struct MixCalcTable {
   @Prop lang: string = 'zh';
   @Prop @Watch('onSettingsChanged') waterPercentage: number = 20;
   @Prop @Watch('onSettingsChanged') fermentedInWater: boolean = false;
-  @Prop @Watch('onSettingsChanged') fermentedInAverage: boolean = false;
+  @Prop fermentedInAverage: boolean = false;
 
   @State offsetX: number = 0;
   @State offsetY: number = 0;
