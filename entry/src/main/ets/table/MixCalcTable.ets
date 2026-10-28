@@ -1084,6 +1084,26 @@ export struct MixCalcTable {
       .width('100%')
       .height('100%')
       .backgroundColor(Color.White)
+      .gesture(
+        PanGesture()
+          .onActionStart(() => {
+            this.stopFling();
+            this.lastPanX = 0;
+            this.lastPanY = 0;
+          })
+          .onActionUpdate((event: GestureEvent) => {
+            const dx: number = event.offsetX - this.lastPanX;
+            const dy: number = event.offsetY - this.lastPanY;
+            this.lastPanX = event.offsetX;
+            this.lastPanY = event.offsetY;
+            this.offsetX -= dx;
+            this.offsetY -= dy;
+            this.clampOffsets();
+          })
+          .onActionEnd((event: GestureEvent) => {
+            this.startFling(event.velocityX, event.velocityY);
+          })
+      )
 
       // 列操作菜单
       if (this.colMenuOpen) {
