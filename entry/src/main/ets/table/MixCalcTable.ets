@@ -389,40 +389,91 @@ export struct MixCalcTable {
     return this.columnLeft(this.editingCol);
   }
 
-  // ===== 屏幕宽度自适应（手机 / 平板）=====
-  // 基准总宽 = WIDTHS 之和（620vp）；屏幕更宽就等比放大列宽，尽量铺满
-  private scaleFactor(): number {
-    const base: number = 620;
-    const w: number = this.viewW;
-    if (w <= 0) {
-      return 1;
+  // ===== 平板/手机列宽（照搬安卓 TabletLayout.computeWidths）=====
+  // 手机：固定 dp 宽度，横向滚动；平板：按可见列数均分屏宽，再按列语义微调、整体贴合屏宽
+  private isTabletMode(): boolean {
+    return this.viewW >= 600;
+  }
+
+  private colShown(index: number): boolean {
+    if (index === 0) {
+      return true;
     }
-    const s: number = w / base;
-    return Math.min(1.6, Math.max(1, s));
+    return this.vis.length > index ? this.vis[index] !== false : true;
+  }
+
+  private cachedW: number[] = [];
+  private cachedWidthKey: string = '';
+
+  private ensureWidths(): void {
+    const key: string = Math.round(this.viewW).toString() + '|' + this.vis.join(',');
+    if (key === this.cachedWidthKey) {
+      return;
+    }
+    this.cachedWidthKey = key;
+    if (!this.isTabletMode()) {
+      this.cachedW = [];
+      return;
+    }
+    let visibleCount: number = 0;
+    for (let i = 0; i < WIDTHS.length; i++) {
+      if (this.colShown(i)) {
+        visibleCount++;
+      }
+    }
+    if (visibleCount === 0) {
+      visibleCount = 1;
+    }
+    const base: number = this.viewW / visibleCount;
+    const out: number[] = [];
+    for (let i = 0; i < WIDTHS.length; i++) {
+      if (!this.colShown(i)) {
+        out.push(0);
+        continue;
+      }
+      const id: string = COLUMN_IDS[i];
+      let w: number = base;
+      if (id === 'shed_number' || id === 'weighed_feed') {
+        w = base * 1.2;
+      }
+      if (id === 'seq' || id === 'average_feed') {
+        w = base * 0.8;
+      }
+      w = Math.max(50, Math.min(w, 120));
+      out.push(w);
+    }
+    // 总额贴合屏宽（安卓：|total - screen| > 50 时整体缩放；这里始终贴合，保证 11 列全显示）
+    let total: number = 0;
+    for (let i = 0; i < out.length; i++) {
+      total += out[i];
+    }
+    if (total > 0) {
+      const scale: number = this.viewW / total;
+      for (let i = 0; i < out.length; i++) {
+        out[i] = Math.floor(out[i] * scale);
+      }
+    }
+    this.cachedW = out;
   }
 
   private cw(index: number): number {
-    return Math.round(WIDTHS[index] * this.scaleFactor());
+    this.ensureWidths();
+    if (this.cachedW.length > index && this.cachedW[index] > 0) {
+      return this.cachedW[index];
+    }
+    return WIDTHS[index];
   }
 
   private rh(): number {
-    const s: number = this.scaleFactor();
-    if (s === 1) {
-      return ROW_H;
-    }
-    return s < 1.2 ? 44 : 48;
+    return ROW_H;
   }
 
   private hh(): number {
-    return this.rh();
+    return HEAD_H;
   }
 
   private fs(): number {
-    const s: number = this.scaleFactor();
-    if (s === 1) {
-      return 14;
-    }
-    return s < 1.2 ? 15 : 16;
+    return 14;
   }
 
   // 自绘光标（数字列没有系统输入框，只能自己闪）
@@ -1512,7 +1563,8 @@ export struct MixCalcTable {
 
   build() {
     Stack() {
-      Column() {        // 表头
+      Column() {
+        // 表头
         Stack({ alignContent: Alignment.TopStart }) {
           Row() {
             ForEach(this.normalIndices(), (col: number) => {
