@@ -521,7 +521,7 @@ struct Index {
   menuRow(item: MenuItem, isLast: boolean) {
     Row() {
       Text(item.label)
-        .fontSize(18)
+        .fontSize(20)
         .fontColor('#333333')
         .textAlign(TextAlign.Center)
         .width('100%')
@@ -549,6 +549,7 @@ struct Index {
       Column() {
         Row() {
           // 与安卓一致：左侧 20% 容器、paddingStart 8dp、图标 26×26 靠左、垂直居中
+          // 点击热区给整个 20% 容器（图标只有 26dp，太小不好按）
           Row() {
             Text('☰')
               .fontSize(22)
@@ -556,15 +557,15 @@ struct Index {
               .width(26)
               .height(26)
               .textAlign(TextAlign.Center)
-              .onClick(() => {
-                this.menuOpen = !this.menuOpen;
-                this.batchMenuOpen = false;
-              })
           }
           .width('20%')
           .height('100%')
           .padding({ left: 8 })
           .justifyContent(FlexAlign.Start)
+          .onClick(() => {
+            this.menuOpen = !this.menuOpen;
+            this.batchMenuOpen = false;
+          })
 
           Text(this.activeBatch === 0 ? t(this.lang, 'title') : t(this.lang, 'title') + ' 02')
             .fontSize(20)
