@@ -970,6 +970,16 @@ export struct MixCalcTable {
       }
       const target: number = cols[pos];
       if (this.isCellEnabled(this.rows[row], target)) {
+        // 换到别的行时同样要守顺序规则：前面有空行、目标行又没数据，就拦住
+        if (row !== this.editingRow) {
+          const firstEmpty: number = this.firstEmptyRow();
+          if (firstEmpty >= 0 && row > firstEmpty && !this.rowHasInput(row)) {
+            this.hintTitle = t(this.lang, 'order.title');
+            this.hintMessage = t(this.lang, 'order.message').replace('%d', (firstEmpty + 1).toString());
+            this.hintController.open();
+            return;
+          }
+        }
         this.moveEditor(row, target);
         return;
       }
