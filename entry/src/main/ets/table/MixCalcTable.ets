@@ -1630,8 +1630,7 @@ export struct MixCalcTable {
           .onSubmit((enterKey: EnterKeyType, event: SubmitEvent) => {
             // 保持编辑态，输入法就不会因为“提交”动作把键盘收起来
             event.keepEditableState();
-            // 键盘上的「下一步」= 回车向下（同一列下一行）
-            this.nextRowDown();
+            this.nextCell();
           })
           .onBlur(() => {
             if (Date.now() - this.editorOpenedAt < 400) {
@@ -1640,6 +1639,23 @@ export struct MixCalcTable {
             this.finishEdit();
           })
 
+        // 自己的「下一行」按钮：相当于回车向下，同一列下一行
+        Text('下一行 ▾')
+          .fontSize(13)
+          .fontColor(Color.White)
+          .textAlign(TextAlign.Center)
+          .width(76)
+          .height(28)
+          .backgroundColor('#2D8C42')
+          .borderRadius(14)
+          .position({
+            x: Math.max(4, this.viewW - 84),
+            y: HEAD_H + Math.max(0, this.viewH - 34)
+          })
+          .zIndex(9)
+          .onClick(() => {
+            this.nextRowDown();
+          })
       }
 
       // 列操作菜单
