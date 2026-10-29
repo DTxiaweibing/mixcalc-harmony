@@ -7,8 +7,11 @@ import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
 import { t } from '../common/Strings';
 import { i18n } from '@kit.LocalizationKit';
+import { util } from '@kit.ArkTS';
 
 const PREF_NAME: string = 'MixCalcPrefs';
+// 隐私政策版本：改了条款就 +1，老用户升级后会重新弹
+const PRIVACY_VERSION: number = 1;
 const ROW_COUNT: number = 30;
 const TITLE_BASE: string = '养虾拌料计算器';
 const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
@@ -22,6 +25,17 @@ class MenuItem {
   constructor(label: string, action: () => void) {
     this.label = label;
     this.action = action;
+  }
+}
+
+// 隐私弹窗正文的片段：link 为空是普通文字，否则是可点开的页面
+class PrivacyToken {
+  text: string;
+  link: string;
+
+  constructor(text: string, link: string) {
+    this.text = text;
+    this.link = link;
   }
 }
 
@@ -47,6 +61,9 @@ struct Index {
   @State fermentAvg: boolean = false;
   @State langPref: string = '';
   @State langOpen: boolean = false;
+  @State privacyOpen: boolean = false;
+  private privacyTitle: string = '';
+  private privacyBody: string = '';
 
   private menuItems(): MenuItem[] {
     return [
@@ -134,6 +151,99 @@ struct Index {
     } catch (e) {
       this.menuWidth = 140;
     }
+    await this.checkPrivacyConsent();
+  }
+
+  // 首次启动（或隐私条款升版）先弹同意框，没同意不给用
+  private async checkPrivacyConsent(): Promise<void> {
+    let agreed: number = 0;
+    try {
+      agreed = await this.store!.get('privacy_version', 0) as number;
+    } catch (e) {
+      agreed = 0;
+    }
+    if (agreed >= PRIVACY_VERSION) {
+      return;
+    }
+    const file: string = this.lang === 'en' ? 'en/privacy_consent.txt' : '隐私政策与使用协议弹窗.txt';
+    let text: string = '';
+    try {
+      const ctx = getContext(this) as common.UIAbilityContext;
+      const data: Uint8Array = await ctx.resourceManager.getRawFileContent(file);
+      text = util.TextDecoder.create('utf-8').decodeToString(data);
+    } catch (e) {
+      text = '';
+    }
+    const lines: string[] = text.split('\n');
+    if (lines.length < 3) {
+      // 文案读不到就不能算同意过：提示后退出，等用户重试
+      promptAction.showToast({
+        message: this.lang === 'en' ? 'Failed to load the privacy text' : '隐私政策文案读取失败',
+        duration: 3000
+      });
+      const ctx2 = getContext(this) as common.UIAbilityContext;
+      ctx2.terminateSelf();
+      return;
+    }
+    this.privacyTitle = lines[0].trim();
+    this.privacyBody = lines[1].trim() + '\n\n' + lines[2].trim();
+    this.privacyOpen = true;
+  }
+
+  private agreePrivacy(): void {
+    this.privacyOpen = false;
+    if (this.store !== null) {
+      this.store.put('privacy_version', PRIVACY_VERSION).then(() => {
+        this.store?.flush();
+      });
+    }
+  }
+
+  private refusePrivacy(): void {
+    const ctx = getContext(this) as common.UIAbilityContext;
+    ctx.terminateSelf();
+  }
+
+  // 把正文切成片段：协议名做成可点的“链接”，其余按字/词拆开便于换行
+  private privacyTokens(): PrivacyToken[] {
+    const body: string = this.privacyBody;
+    const linkUser: string = this.lang === 'en' ? 'User Agreement' : '用户协议';
+    const linkPrivacy: string = this.lang === 'en' ? 'Privacy Policy' : '隐私政策';
+    const out: PrivacyToken[] = [];
+    let buf: string = '';
+    let i: number = 0;
+    while (i < body.length) {
+      if (body.startsWith(linkUser, i)) {
+        if (buf.length > 0) {
+          out.push(new PrivacyToken(buf, ''));
+          buf = '';
+        }
+        out.push(new PrivacyToken(linkUser, 'user.html'));
+        i += linkUser.length;
+        continue;
+      }
+      if (body.startsWith(linkPrivacy, i)) {
+        if (buf.length > 0) {
+          out.push(new PrivacyToken(buf, ''));
+          buf = '';
+        }
+        out.push(new PrivacyToken(linkPrivacy, 'privacy.html'));
+        i += linkPrivacy.length;
+        continue;
+      }
+      const ch: string = body.charAt(i);
+      buf += ch;
+      const isCjk: boolean = ch.charCodeAt(0) > 127;
+      if (isCjk || ch === ' ' || ch === '\n') {
+        out.push(new PrivacyToken(buf, ''));
+        buf = '';
+      }
+      i++;
+    }
+    if (buf.length > 0) {
+      out.push(new PrivacyToken(buf, ''));
+    }
+    return out;
   }
 
   private syncBatchSettings(): void {
@@ -752,6 +862,89 @@ struct Index {
               })
           }
           .width(280)
+          .backgroundColor(Color.White)
+          .borderRadius(12)
+          .clip(true)
+        }
+        .width('100%')
+        .height('100%')
+      }
+
+      // 首次启动隐私同意弹窗（盖在主页上，不可点外部关闭）
+      if (this.privacyOpen) {
+        Stack({ alignContent: Alignment.Center }) {
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor('#66000000')
+
+          Column() {
+            Text(this.privacyTitle)
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#000000')
+              .width('100%')
+              .textAlign(TextAlign.Center)
+              .padding({ top: 16, bottom: 12, left: 16, right: 16 })
+
+            Divider().strokeWidth(1).color('#E0E0E0')
+
+            Scroll() {
+              Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center }) {
+                ForEach(this.privacyTokens(), (tok: PrivacyToken, idx: number) => {
+                  if (tok.link === '') {
+                    Text(tok.text)
+                      .fontSize(13)
+                      .fontColor('#333333')
+                      .lineHeight(20)
+                  } else {
+                    Text(tok.text)
+                      .fontSize(13)
+                      .fontColor('#2D8C42')
+                      .lineHeight(20)
+                      .onClick(() => {
+                        this.openPage(tok.link);
+                      })
+                  }
+                }, (tok: PrivacyToken, idx: number) => idx.toString() + tok.text)
+              }
+              .width('100%')
+            }
+            .constraintSize({ maxHeight: 320 })
+            .scrollBar(BarState.Off)
+            .padding({ top: 20, bottom: 20, left: 20, right: 20 })
+
+            Divider().strokeWidth(1).color('#E0E0E0')
+
+            Row() {
+              Text(t(this.lang, 'privacy.disagree'))
+                .layoutWeight(1)
+                .height(48)
+                .fontSize(15)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#D32F2F')
+                .textAlign(TextAlign.Center)
+                .onClick(() => {
+                  this.refusePrivacy();
+                })
+
+              Divider().vertical(true).height(48).strokeWidth(1).color('#E0E0E0')
+
+              Text(t(this.lang, 'privacy.agree'))
+                .layoutWeight(1)
+                .height(48)
+                .fontSize(15)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#2D8C42')
+                .textAlign(TextAlign.Center)
+                .onClick(() => {
+                  this.agreePrivacy();
+                })
+            }
+            .width('100%')
+            .height(48)
+          }
+          .width('85%')
           .backgroundColor(Color.White)
           .borderRadius(12)
           .clip(true)
