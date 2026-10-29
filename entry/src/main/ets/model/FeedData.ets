@@ -80,7 +80,8 @@ export class FeedData {
       .replace(/~/g, '-')
       .replace(/—/g, '-');
     if (normalized.indexOf('-') >= 0) {
-      let seg: string[] = normalized.split('-');
+      // 与安卓一致：只取最前面的两段（split("-", 2)）
+      let seg: string[] = normalized.split('-', 2);
       if (seg.length >= 2) {
         let a: number = parseInt(seg[0].replace(/[^0-9]/g, ''), 10);
         let b: number = parseInt(seg[1].replace(/[^0-9]/g, ''), 10);
