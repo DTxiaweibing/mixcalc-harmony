@@ -235,6 +235,8 @@ export struct MixCalcTable {
   private editingText: string = '';
   private editingSeed: string = '';
   @State editorText: string = '';
+  @State caretOn: boolean = true;
+  private caretTimer: number = -1;
   private editDirty: boolean = false;
   // 换格时旧输入框的 blur 会晚一步到达，别让它把新开的编辑器关掉
   private editorOpenedAt: number = 0;
@@ -385,6 +387,23 @@ export struct MixCalcTable {
   // 编辑器横坐标：和格子用同一套坐标，不做夹紧（夹紧会让它停在别的格子上“悬浮”）
   private editorX(): number {
     return this.columnLeft(this.editingCol);
+  }
+
+  // 自绘光标（数字列没有系统输入框，只能自己闪）
+  private startCaret(): void {
+    this.stopCaret();
+    this.caretOn = true;
+    this.caretTimer = setInterval(() => {
+      this.caretOn = !this.caretOn;
+    }, 520);
+  }
+
+  private stopCaret(): void {
+    if (this.caretTimer !== -1) {
+      clearInterval(this.caretTimer);
+      this.caretTimer = -1;
+    }
+    this.caretOn = true;
   }
 
   private clampOffsets(): void {
@@ -732,6 +751,7 @@ export struct MixCalcTable {
     this.editingCol = -1;
     this.editingSeed = '';
     this.editDirty = false;
+    this.stopCaret();
     if (wasDirty) {
       this.applyEdit(text, true);
     }
@@ -947,6 +967,7 @@ export struct MixCalcTable {
         focusControl.requestFocus('cellEditor');
       }, 1200);
     }
+    this.startCaret();
     this.ensureEditorVisible();
   }
 
@@ -999,9 +1020,10 @@ export struct MixCalcTable {
     if (!this.isCellEnabled(this.rows[row], column)) {
       return;
     }
-    // 只能从上往下按顺序填：前面还有空行时不允许跳到后面那行
+    // 只能从上往下按顺序填，但只拦“空行”：
+    // 中间某行被清空后，后面已经有数据的行照样能改，不会把人挡死
     const firstEmpty: number = this.firstEmptyRow();
-    if (firstEmpty >= 0 && row > firstEmpty) {
+    if (firstEmpty >= 0 && row > firstEmpty && !this.rowHasInput(row)) {
       this.hintTitle = t(this.lang, 'order.title');
       this.hintMessage = t(this.lang, 'order.message').replace('%d', (firstEmpty + 1).toString());
       this.hintController.open();
@@ -1035,6 +1057,7 @@ export struct MixCalcTable {
     setTimeout(() => {
       focusControl.requestFocus('cellEditor');
     }, 60);
+    this.startCaret();
   }
 
   // ===== 列操作菜单 =====
@@ -1300,6 +1323,7 @@ export struct MixCalcTable {
 
   aboutToDisappear(): void {
     this.stopFling();
+    this.stopCaret();
   }
 
   onRefreshTick(): void {
@@ -1507,10 +1531,6 @@ export struct MixCalcTable {
         .backgroundColor('#EAF3EC')
         .clip(true)
 
-        // 自绘数字键盘是布局的一部分：表尾正好压在它上面，不留缝也不遮挡
-        if (this.editingRow >= 0 && this.editingCol >= 2) {
-          this.numKeypad()
-        }
       }
       .width('100%')
       .height('100%')
@@ -1538,69 +1558,51 @@ export struct MixCalcTable {
 
       // 单元格编辑器：放在最外层 Stack（和表体平级），
       // 表体重排不会重建它，焦点和键盘才稳；坐标自己按 表头高 + 行号*行高 - 滚动量 算
+      // 单元格编辑器：全表唯一，和最外层 Stack 平级（表体重排不会重建它）
+      // 统一用系统输入法（搜狗/小艺都行，平板上也稳），数字列只允许数字和小数点
       if (this.editingRow >= 0 && this.editingCol >= 0) {
-        if (this.editingCol === 1) {
-          // 棚号可能带文字，这一列用系统键盘
-          TextInput({ text: this.editorText, controller: this.editorCtrl })
-            .id('cellEditor')
-            .type(InputType.Normal)
-            .width(WIDTHS[this.editingCol])
-            .height(ROW_H)
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#000000')
-            .textAlign(TextAlign.Center)
-            .maxLines(1)
-            .padding(0)
-            .borderRadius(0)
-            .backgroundColor(Color.White)
-            .border({ width: 1.5, color: '#2D8C42' })
-            .caretColor('#2D8C42')
-            .position({
-              x: this.editorX(),
-              y: HEAD_H + this.editingRow * ROW_H - this.offsetY
-            })
-            .zIndex(0)
-            .defaultFocus(true)
-            .focusable(true)
-            .enableKeyboardOnFocus(true)
-            .enterKeyType(EnterKeyType.Next)
-            .onChange((text: string) => {
-              this.editingText = text;
-              this.editorText = text;
-              if (this.suppressChange) {
-                this.suppressChange = false;
-                return;
-              }
-              this.editLive(text);
-            })
-            .onSubmit(() => {
-              this.nextCell();
-            })
-            .onBlur(() => {
-              if (Date.now() - this.editorOpenedAt < 400) {
-                return;
-              }
-              this.finishEdit();
-            })
-        } else {
-          // 数字列：只用自绘键盘，不放可编辑控件，系统输入法根本不参与
-          Text(this.editorText)
-            .width(WIDTHS[this.editingCol])
-            .height(ROW_H)
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#000000')
-            .textAlign(TextAlign.Center)
-            .maxLines(1)
-            .backgroundColor(Color.White)
-            .border({ width: 1.5, color: '#2D8C42' })
-            .position({
-              x: this.editorX(),
-              y: HEAD_H + this.editingRow * ROW_H - this.offsetY
-            })
-            .zIndex(0)
-        }
+        TextInput({ text: this.editorText, controller: this.editorCtrl })
+          .id('cellEditor')
+          .type(this.editingCol === 1 ? InputType.Normal : InputType.NUMBER_DECIMAL)
+          .inputFilter(this.editingCol === 1 ? '[0-9.\-]' : '[0-9.]')
+          .width(WIDTHS[this.editingCol])
+          .height(ROW_H)
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#000000')
+          .textAlign(TextAlign.Center)
+          .maxLines(1)
+          .padding(0)
+          .borderRadius(0)
+          .backgroundColor(Color.White)
+          .border({ width: 1.5, color: '#2D8C42' })
+          .caretColor('#2D8C42')
+          .position({
+            x: this.editorX(),
+            y: HEAD_H + this.editingRow * ROW_H - this.offsetY
+          })
+          .defaultFocus(true)
+          .focusable(true)
+          .enableKeyboardOnFocus(true)
+          .enterKeyType(EnterKeyType.Next)
+          .onChange((text: string) => {
+            this.editingText = text;
+            this.editorText = text;
+            if (this.suppressChange) {
+              this.suppressChange = false;
+              return;
+            }
+            this.editLive(text);
+          })
+          .onSubmit(() => {
+            this.nextCell();
+          })
+          .onBlur(() => {
+            if (Date.now() - this.editorOpenedAt < 400) {
+              return;
+            }
+            this.finishEdit();
+          })
       }
 
       // 列操作菜单
