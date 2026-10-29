@@ -679,6 +679,8 @@ export struct MixCalcTable {
     }
 
     if (col === 1) {
+      // 改棚号就以这次为准：清掉“棚数手改过”的标记，按新棚号重新算棚数
+      row.isShedCountManuallyModified = false;
       row.setShedNumber(value);
       if (value.length === 0) {
         this.clearRowData(row, true);
