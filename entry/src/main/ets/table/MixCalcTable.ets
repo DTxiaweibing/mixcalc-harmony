@@ -354,7 +354,7 @@ export struct MixCalcTable {
     let w: number = 0;
     const fixed: number[] = this.fixedIndices();
     for (let i = 0; i < fixed.length; i++) {
-      w += WIDTHS[fixed[i]];
+      w += this.cw(fixed[i]);
     }
     return w;
   }
@@ -363,7 +363,7 @@ export struct MixCalcTable {
     let w: number = 0;
     const normal: number[] = this.normalIndices();
     for (let i = 0; i < normal.length; i++) {
-      w += WIDTHS[normal[i]];
+      w += this.cw(normal[i]);
     }
     return w;
   }
@@ -373,7 +373,7 @@ export struct MixCalcTable {
   }
 
   private bodyHeight(): number {
-    return this.rows.length * ROW_H;
+    return this.rows.length * this.rh();
   }
 
   private maxOffsetX(): number {
@@ -387,6 +387,42 @@ export struct MixCalcTable {
   // 编辑器横坐标：和格子用同一套坐标，不做夹紧（夹紧会让它停在别的格子上“悬浮”）
   private editorX(): number {
     return this.columnLeft(this.editingCol);
+  }
+
+  // ===== 屏幕宽度自适应（手机 / 平板）=====
+  // 基准总宽 = WIDTHS 之和（620vp）；屏幕更宽就等比放大列宽，尽量铺满
+  private scaleFactor(): number {
+    const base: number = 620;
+    const w: number = this.viewW;
+    if (w <= 0) {
+      return 1;
+    }
+    const s: number = w / base;
+    return Math.min(1.6, Math.max(1, s));
+  }
+
+  private cw(index: number): number {
+    return Math.round(WIDTHS[index] * this.scaleFactor());
+  }
+
+  private rh(): number {
+    const s: number = this.scaleFactor();
+    if (s === 1) {
+      return ROW_H;
+    }
+    return s < 1.2 ? 44 : 48;
+  }
+
+  private hh(): number {
+    return this.rh();
+  }
+
+  private fs(): number {
+    const s: number = this.scaleFactor();
+    if (s === 1) {
+      return 14;
+    }
+    return s < 1.2 ? 15 : 16;
   }
 
   // 自绘光标（数字列没有系统输入框，只能自己闪）
@@ -411,16 +447,16 @@ export struct MixCalcTable {
     this.offsetY = Math.min(Math.max(0, this.offsetY), this.maxOffsetY());
     // 编辑中的格子滚出可视区就收起来（对齐安卓 CellEditorOverlay.onScrolled）
     if (this.editingRow >= 0) {
-      const top: number = this.editingRow * ROW_H - this.offsetY;
+      const top: number = this.editingRow * this.rh() - this.offsetY;
       // 只要这一行不再完整地待在表体里（钻到表头下面或滑出底部），就收起编辑，
       // 免得输入框画到表头 / 表尾上面去
-      if (this.viewH > 0 && (top < 0 || top + ROW_H > this.viewH)) {
+      if (this.viewH > 0 && (top < 0 || top + this.rh() > this.viewH)) {
         this.finishEdit();
         return;
       }
       if (this.editingCol >= 0 && !this.isFixed(this.editingCol)) {
         const x: number = this.columnLeft(this.editingCol);
-        const w: number = WIDTHS[this.editingCol];
+        const w: number = this.cw(this.editingCol);
         // 只要这格横向不再完整可见（滚到冻结列底下或滚出右边），立刻收编辑
         if (x < this.frozenWidth() || x + w > this.viewW) {
           this.finishEdit();
@@ -436,7 +472,7 @@ export struct MixCalcTable {
       if (fixed[i] === index) {
         return x;
       }
-      x += WIDTHS[fixed[i]];
+      x += this.cw(fixed[i]);
     }
     let nx: number = 0;
     const normal: number[] = this.normalIndices();
@@ -444,7 +480,7 @@ export struct MixCalcTable {
       if (normal[i] === index) {
         return this.frozenWidth() + nx - this.offsetX;
       }
-      nx += WIDTHS[normal[i]];
+      nx += this.cw(normal[i]);
     }
     return 0;
   }
@@ -1021,14 +1057,14 @@ export struct MixCalcTable {
     if (this.editingRow < 0 || this.editingCol < 0) {
       return;
     }
-    const rowTop: number = this.editingRow * ROW_H;
+    const rowTop: number = this.editingRow * this.rh();
     if (rowTop < this.offsetY) {
       this.offsetY = rowTop;
-    } else if (rowTop + ROW_H > this.offsetY + this.viewH) {
-      this.offsetY = rowTop + ROW_H - this.viewH;
+    } else if (rowTop + this.rh() > this.offsetY + this.viewH) {
+      this.offsetY = rowTop + this.rh() - this.viewH;
     }
     const x: number = this.columnLeft(this.editingCol);
-    const w: number = WIDTHS[this.editingCol];
+    const w: number = this.cw(this.editingCol);
     if (!this.isFixed(this.editingCol)) {
       // 非固定列不能钻到冻结列底下（否则输入框会盖在“序号”上）
       const fw: number = this.frozenWidth();
@@ -1212,7 +1248,7 @@ export struct MixCalcTable {
     this.ratioCurrent = data.switchRatio;
     const maxX: number = Math.max(0, this.viewW - 160);
     this.ratioX = Math.max(0, Math.min(this.columnLeft(column), maxX));
-    this.ratioY = Math.min((row + 1) * ROW_H - this.offsetY, Math.max(0, this.viewH - 260));
+    this.ratioY = Math.min((row + 1) * this.rh() - this.offsetY, Math.max(0, this.viewH - 260));
     this.ratioOpenedAt = Date.now();
     this.ratioOpen = true;
   }
@@ -1400,9 +1436,9 @@ export struct MixCalcTable {
   @Builder
   cellView(row: FeedData, col: number, r: number) {
     Text(this.cellText(row, col, r))
-      .width(WIDTHS[col])
-      .height(ROW_H)
-      .fontSize(14)
+      .width(this.cw(col))
+      .height(this.rh())
+      .fontSize(this.fs())
       .fontWeight(FontWeight.Bold)
       .fontColor(this.cellColor(col))
       .textAlign(TextAlign.Center)
@@ -1424,9 +1460,9 @@ export struct MixCalcTable {
   @Builder
   headerCell(col: number) {
     Text(this.headLabel(col))
-      .width(WIDTHS[col])
-      .height(HEAD_H)
-      .fontSize(14)
+      .width(this.cw(col))
+      .height(this.hh())
+      .fontSize(this.fs())
       .fontWeight(FontWeight.Bold)
       .fontColor('#000000')
       .textAlign(TextAlign.Center)
@@ -1456,9 +1492,9 @@ export struct MixCalcTable {
   @Builder
   footerCell(col: number) {
     Text(this.footerText(col))
-      .width(WIDTHS[col])
-      .height(FOOT_H)
-      .fontSize(14)
+      .width(this.cw(col))
+      .height(this.rh())
+      .fontSize(this.fs())
       .fontWeight(FontWeight.Bold)
       .fontColor(this.footerColor(col))
       .textAlign(TextAlign.Center)
@@ -1493,7 +1529,7 @@ export struct MixCalcTable {
           .zIndex(1)
         }
         .width('100%')
-        .height(HEAD_H)
+        .height(this.hh())
         .backgroundColor('#FFFFFF')
         .clip(true)
 
@@ -1506,7 +1542,7 @@ export struct MixCalcTable {
                   this.cellView(row, col, r)
                 }, (col: number) => 'c' + r.toString() + '_' + col.toString() + '_' + this.version.toString())
               }
-              .height(ROW_H)
+              .height(this.rh())
             }, (row: FeedData, r: number) => 'row' + r.toString() + '_' + this.version.toString())
           }
           .width(this.normalWidth())
@@ -1519,7 +1555,7 @@ export struct MixCalcTable {
                   this.cellView(row, col, r)
                 }, (col: number) => 'f' + r.toString() + '_' + col.toString() + '_' + this.version.toString())
               }
-              .height(ROW_H)
+              .height(this.rh())
             }, (row: FeedData, r: number) => 'frow' + r.toString() + '_' + this.version.toString())
           }
           .width(this.frozenWidth())
@@ -1572,7 +1608,7 @@ export struct MixCalcTable {
           .zIndex(1)
         }
         .width('100%')
-        .height(FOOT_H)
+        .height(this.rh())
         .backgroundColor('#EAF3EC')
         .clip(true)
 
@@ -1610,9 +1646,9 @@ export struct MixCalcTable {
           .id('cellEditor')
           .type(this.editingCol === 1 ? InputType.Normal : InputType.NUMBER_DECIMAL)
           .inputFilter(this.editingCol === 1 ? '[0-9.\-]' : '[0-9.]')
-          .width(WIDTHS[this.editingCol])
-          .height(ROW_H)
-          .fontSize(14)
+          .width(this.cw(this.editingCol))
+          .height(this.rh())
+          .fontSize(this.fs())
           .fontWeight(FontWeight.Bold)
           .fontColor('#000000')
           .textAlign(TextAlign.Center)
@@ -1624,7 +1660,7 @@ export struct MixCalcTable {
           .caretColor('#2D8C42')
           .position({
             x: this.editorX(),
-            y: HEAD_H + this.editingRow * ROW_H - this.offsetY
+            y: this.hh() + this.editingRow * this.rh() - this.offsetY
           })
           .defaultFocus(true)
           .focusable(true)
@@ -1662,7 +1698,7 @@ export struct MixCalcTable {
           .borderRadius(14)
           .position({
             x: Math.max(4, this.viewW - 84),
-            y: HEAD_H + Math.max(0, this.viewH - 34)
+            y: this.hh() + Math.max(0, this.viewH - 34)
           })
           .zIndex(9)
           .onClick(() => {
@@ -1717,7 +1753,7 @@ export struct MixCalcTable {
         .borderRadius(12)
         .clip(true)
         .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
-        .position({ x: this.colMenuX, y: HEAD_H })
+        .position({ x: this.colMenuX, y: this.hh() })
       }
 
       // 水比 / 发酵料
@@ -1766,7 +1802,7 @@ export struct MixCalcTable {
         .borderRadius(12)
         .clip(true)
         .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
-        .position({ x: this.pickX, y: HEAD_H })
+        .position({ x: this.pickX, y: this.hh() })
       }
 
       // 换料比例
