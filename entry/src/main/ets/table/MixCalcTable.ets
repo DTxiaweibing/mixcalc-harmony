@@ -1436,14 +1436,14 @@ export struct MixCalcTable {
           Row() {
             ForEach(this.normalIndices(), (col: number) => {
               this.headerCell(col)
-            }, (col: number) => 'h' + col.toString() + '_' + this.version.toString())
+            }, (col: number) => 'h' + col.toString() + '')
           }
           .position({ x: this.frozenWidth() - this.offsetX, y: 0 })
 
           Row() {
             ForEach(this.fixedIndices(), (col: number) => {
               this.headerCell(col)
-            }, (col: number) => 'hf' + col.toString() + '_' + this.version.toString())
+            }, (col: number) => 'hf' + col.toString() + '')
           }
           .zIndex(1)
         }
@@ -1459,10 +1459,10 @@ export struct MixCalcTable {
               Row() {
                 ForEach(this.normalIndices(), (col: number) => {
                   this.cellView(row, col, r)
-                }, (col: number) => 'c' + r.toString() + '_' + col.toString() + '_' + this.version.toString())
+                }, (col: number) => 'c' + r.toString() + '_' + col.toString() + '')
               }
               .height(ROW_H)
-            }, (row: FeedData, r: number) => 'row' + r.toString() + '_' + this.version.toString())
+            }, (row: FeedData, r: number) => 'row' + r.toString() + '')
           }
           .width(this.normalWidth())
           .position({ x: this.frozenWidth() - this.offsetX, y: -this.offsetY })
@@ -1472,10 +1472,10 @@ export struct MixCalcTable {
               Row() {
                 ForEach(this.fixedIndices(), (col: number) => {
                   this.cellView(row, col, r)
-                }, (col: number) => 'f' + r.toString() + '_' + col.toString() + '_' + this.version.toString())
+                }, (col: number) => 'f' + r.toString() + '_' + col.toString() + '')
               }
               .height(ROW_H)
-            }, (row: FeedData, r: number) => 'frow' + r.toString() + '_' + this.version.toString())
+            }, (row: FeedData, r: number) => 'frow' + r.toString() + '')
           }
           .width(this.frozenWidth())
           .position({ x: 0, y: -this.offsetY })
@@ -1515,14 +1515,14 @@ export struct MixCalcTable {
           Row() {
             ForEach(this.normalIndices(), (col: number) => {
               this.footerCell(col)
-            }, (col: number) => 'f' + col.toString() + '_' + this.version.toString())
+            }, (col: number) => 'f' + col.toString() + '')
           }
           .position({ x: this.frozenWidth() - this.offsetX, y: 0 })
 
           Row() {
             ForEach(this.fixedIndices(), (col: number) => {
               this.footerCell(col)
-            }, (col: number) => 'ff' + col.toString() + '_' + this.version.toString())
+            }, (col: number) => 'ff' + col.toString() + '')
           }
           .zIndex(1)
         }
@@ -1561,7 +1561,7 @@ export struct MixCalcTable {
       // 单元格编辑器：全表唯一，和最外层 Stack 平级（表体重排不会重建它）
       // 统一用系统输入法（搜狗/小艺都行，平板上也稳），数字列只允许数字和小数点
       if (this.editingRow >= 0 && this.editingCol >= 0) {
-        TextInput({ text: this.editorText, controller: this.editorCtrl })
+        TextInput({ text: $$this.editorText })
           .id('cellEditor')
           .type(this.editingCol === 1 ? InputType.Normal : InputType.NUMBER_DECIMAL)
           .inputFilter(this.editingCol === 1 ? '[0-9.\-]' : '[0-9.]')
@@ -1587,7 +1587,6 @@ export struct MixCalcTable {
           .enterKeyType(EnterKeyType.Next)
           .onChange((text: string) => {
             this.editingText = text;
-            this.editorText = text;
             if (this.suppressChange) {
               this.suppressChange = false;
               return;
@@ -1595,13 +1594,31 @@ export struct MixCalcTable {
             this.editLive(text);
           })
           .onSubmit(() => {
-            this.nextCell();
+            this.applyEdit(this.editingText, true);
           })
           .onBlur(() => {
             if (Date.now() - this.editorOpenedAt < 400) {
               return;
             }
             this.finishEdit();
+          })
+
+        // 自己的换格按钮：不碰输入法的动作键，键盘就不会收
+        Text('下一格 ▸')
+          .fontSize(13)
+          .fontColor(Color.White)
+          .textAlign(TextAlign.Center)
+          .width(76)
+          .height(28)
+          .backgroundColor('#2D8C42')
+          .borderRadius(14)
+          .position({
+            x: Math.max(4, this.viewW - 84),
+            y: HEAD_H + Math.max(0, this.viewH - 34)
+          })
+          .zIndex(9)
+          .onClick(() => {
+            this.nextCell();
           })
       }
 
