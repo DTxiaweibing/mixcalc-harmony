@@ -90,6 +90,7 @@ struct ConfirmDialog {
   title: string = '';
   message: string = '';
   confirmText: string = '确定重置';
+  cancelText: string = '取消';
   confirmColor: string = '#D32F2F';
   onConfirm: () => void = () => {};
 
@@ -115,7 +116,7 @@ struct ConfirmDialog {
       Divider().strokeWidth(1).color('#E0E0E0')
 
       Row() {
-        Button('取消')
+        Button(this.cancelText)
           .type(ButtonType.Normal)
           .layoutWeight(1)
           .height(48)
@@ -291,9 +292,10 @@ export struct MixCalcTable {
   private resetMessage: string = '';
   private resetController: CustomDialogController = new CustomDialogController({
     builder: ConfirmDialog({
-      title: '确认重置',
+      title: t(this.lang, 'dlg.reset'),
       message: this.resetMessage,
-      confirmText: '确定重置',
+      cancelText: t(this.lang, 'btn.cancel'),
+      confirmText: t(this.lang, 'btn.reset'),
       confirmColor: '#D32F2F',
       onConfirm: () => {
         this.resetAll();
