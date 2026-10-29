@@ -1436,14 +1436,14 @@ export struct MixCalcTable {
           Row() {
             ForEach(this.normalIndices(), (col: number) => {
               this.headerCell(col)
-            }, (col: number) => 'h' + col.toString() + '')
+            }, (col: number) => 'h' + col.toString() + '_' + this.version.toString())
           }
           .position({ x: this.frozenWidth() - this.offsetX, y: 0 })
 
           Row() {
             ForEach(this.fixedIndices(), (col: number) => {
               this.headerCell(col)
-            }, (col: number) => 'hf' + col.toString() + '')
+            }, (col: number) => 'hf' + col.toString() + '_' + this.version.toString())
           }
           .zIndex(1)
         }
@@ -1459,10 +1459,10 @@ export struct MixCalcTable {
               Row() {
                 ForEach(this.normalIndices(), (col: number) => {
                   this.cellView(row, col, r)
-                }, (col: number) => 'c' + r.toString() + '_' + col.toString() + '')
+                }, (col: number) => 'c' + r.toString() + '_' + col.toString() + '_' + this.version.toString())
               }
               .height(ROW_H)
-            }, (row: FeedData, r: number) => 'row' + r.toString() + '')
+            }, (row: FeedData, r: number) => 'row' + r.toString() + '_' + this.version.toString())
           }
           .width(this.normalWidth())
           .position({ x: this.frozenWidth() - this.offsetX, y: -this.offsetY })
@@ -1472,10 +1472,10 @@ export struct MixCalcTable {
               Row() {
                 ForEach(this.fixedIndices(), (col: number) => {
                   this.cellView(row, col, r)
-                }, (col: number) => 'f' + r.toString() + '_' + col.toString() + '')
+                }, (col: number) => 'f' + r.toString() + '_' + col.toString() + '_' + this.version.toString())
               }
               .height(ROW_H)
-            }, (row: FeedData, r: number) => 'frow' + r.toString() + '')
+            }, (row: FeedData, r: number) => 'frow' + r.toString() + '_' + this.version.toString())
           }
           .width(this.frozenWidth())
           .position({ x: 0, y: -this.offsetY })
@@ -1515,14 +1515,14 @@ export struct MixCalcTable {
           Row() {
             ForEach(this.normalIndices(), (col: number) => {
               this.footerCell(col)
-            }, (col: number) => 'f' + col.toString() + '')
+            }, (col: number) => 'f' + col.toString() + '_' + this.version.toString())
           }
           .position({ x: this.frozenWidth() - this.offsetX, y: 0 })
 
           Row() {
             ForEach(this.fixedIndices(), (col: number) => {
               this.footerCell(col)
-            }, (col: number) => 'ff' + col.toString() + '')
+            }, (col: number) => 'ff' + col.toString() + '_' + this.version.toString())
           }
           .zIndex(1)
         }
@@ -1561,7 +1561,7 @@ export struct MixCalcTable {
       // 单元格编辑器：全表唯一，和最外层 Stack 平级（表体重排不会重建它）
       // 统一用系统输入法（搜狗/小艺都行，平板上也稳），数字列只允许数字和小数点
       if (this.editingRow >= 0 && this.editingCol >= 0) {
-        TextInput({ text: $$this.editorText })
+        TextInput({ text: this.editorText, controller: this.editorCtrl })
           .id('cellEditor')
           .type(this.editingCol === 1 ? InputType.Normal : InputType.NUMBER_DECIMAL)
           .inputFilter(this.editingCol === 1 ? '[0-9.\-]' : '[0-9.]')
@@ -1587,14 +1587,17 @@ export struct MixCalcTable {
           .enterKeyType(EnterKeyType.Next)
           .onChange((text: string) => {
             this.editingText = text;
+            this.editorText = text;
             if (this.suppressChange) {
               this.suppressChange = false;
               return;
             }
             this.editLive(text);
           })
-          .onSubmit(() => {
-            this.applyEdit(this.editingText, true);
+          .onSubmit((enterKey: EnterKeyType, event: SubmitEvent) => {
+            // 保持编辑态，输入法就不会因为“提交”动作把键盘收起来
+            event.keepEditableState();
+            this.nextCell();
           })
           .onBlur(() => {
             if (Date.now() - this.editorOpenedAt < 400) {
