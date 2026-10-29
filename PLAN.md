@@ -57,9 +57,47 @@ _最近更新：2026-10-29_
       · 缺真机验证
 
 ## 待办（按依赖顺序）
-1. [ ] 平板真机验证（800×1280 / 1000×1600）；或把 SDK `Previewer.exe` 跑通按分辨率出图
+1. [ ] 平板真机验证（800×1280 / 1000×1600）
 2. [ ] 逐项复核对齐清单（见下节「已知差异」）
 3. [ ] 上架准备：versionCode/versionName 定版、应用图标、隐私政策与用户协议**外链托管**（商店要求可访问链接）、软著信息、签名、应用市场素材
+
+## 平板验证的两条路（按性价比排序）
+
+### A. 华为 AGC 云调试（优先，无需真机）
+1. 华为开发者账号（需实名）→ AGC 创建项目 / 应用（包名 `com.shrimpfarm.mixcalc`）
+2. **发布证书**：AGC「证书、APP ID 和 Profile」→ 生成 `.cer` / `.p7b`（需要先做 CSR；签名指纹要和 HAP 一致）
+3. 用发布证书重签 HAP（`hap-sign-tool`），否则云机装不上
+4. AGC「云调试」→ 选平板（MatePad 竖屏）→ 上传 HAP → 远程操作 + 截图
+5. 验收点：11 列是否一次全显示（不横滑）、行高 40、字号 14、键盘弹出时表尾是否贴键盘
+
+### B. 本地 SDK Previewer（继续啃，可离线）
+- `hvigorw ... PreviewBuild` 生成 `.preview` 产物 → 用 `sdk\default\openharmony\previewer\common\bin\Previewer.exe` 按 800×1280 渲染
+- 卡点：`Previewer.exe` 需要 `-lws <端口>` 与 IDE 侧通信，命令行参数要靠试
+
+## 会话交接（新开对话时先读这里）
+
+**项目位置**
+- 鸿蒙：`D:\mixcalc-harmony`（包名 `com.shrimpfarm.mixcalc`，版本 0.3.4 / versionCode 1000304）
+- 安卓：`D:\mixcalc-lab`（0.3.4 / versionCode 7）
+- 远端：Gitee `xia-guard/mixcalc-harmony`、`xia-guard/mixcalc-lab`；GitHub `DTxiaweibing/mixcalc-harmony`、`DTxiaweibing/mixcalc-lab`（**必须走 SSH**，443 常被网络重置）
+
+**构建 / 安装**（鸿蒙）
+```powershell
+$root='D:\command-line-tools\command-line-tools'
+$env:PATH="$root\bin;$root\tool\node;$env:PATH"; $env:DEVECO_SDK_HOME="$root\sdk"
+cd D:\mixcalc-harmony
+hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no-daemon
+hdc tconn 192.168.10.104:42085
+hdc -t <dev> install -r entry\build\default\outputs\default\entry-default-signed.hap
+hdc -t <dev> shell aa force-stop -b com.shrimpfarm.mixcalc
+hdc -t <dev> shell aa start -a EntryAbility -b com.shrimpfarm.mixcalc
+```
+（装完必须 force-stop + start，否则跑的还是旧进程）
+
+**必读技能**：`harmony-arkui-input-focus`（输入框/键盘/焦点全是坑）、`android-custom-table`（对照安卓做法）
+
+**当前状态**：功能对齐已完成（编辑、顺序录入、隐私弹窗、表尾、颜色、字号、竖屏、惯性）；只剩平板验证 + 上架准备。
+
 
 ## 已知差异 / 待复核
 - [x] ~~首行平均值取值~~ → 与安卓一致（已核对）
