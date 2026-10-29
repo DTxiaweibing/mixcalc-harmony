@@ -8,3 +8,11 @@ node_modules/
 oh_modules/
 *.jpeg
 *.jpg
+
+# 签名材料 / 云测产物：不要提交
+*.p12
+*.csr
+*.cer
+*.p7b
+/sign
+/dist

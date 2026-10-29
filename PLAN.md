@@ -58,18 +58,17 @@ _最近更新：2026-10-29_
       · 缺真机验证
 
 ## 待办（按依赖顺序）
-1. [ ] 平板真机验证（800×1280 / 1000×1600）
+1. [ ] 平板真机验证（800×1280 / 1000×1600）—— 先走 [云调试指南](docs/huawei-cloud-test-guide.md)
 2. [ ] 逐项复核对齐清单（见下节「已知差异」）
 3. [ ] 上架准备：versionCode/versionName 定版、应用图标、隐私政策与用户协议**外链托管**（商店要求可访问链接）、软著信息、签名、应用市场素材
 
 ## 平板验证的两条路（按性价比排序）
 
-### A. 华为 AGC 云调试（优先，无需真机）
-1. 华为开发者账号（需实名）→ AGC 创建项目 / 应用（包名 `com.shrimpfarm.mixcalc`）
-2. **发布证书**：AGC「证书、APP ID 和 Profile」→ 生成 `.cer` / `.p7b`（需要先做 CSR；签名指纹要和 HAP 一致）
-3. 用发布证书重签 HAP（`hap-sign-tool`），否则云机装不上
-4. AGC「云调试」→ 选平板（MatePad 竖屏）→ 上传 HAP → 远程操作 + 截图
-5. 验收点：11 列是否一次全显示（不横滑）、行高 40、字号 14、键盘弹出时表尾是否贴键盘
+### A. 华为 AGC 云调试 / 云测试（优先，无需真机）
+**完整步骤（账号 → 发布证书 / Profile → release 签名 → 云调试 MatePad → 云测试 → 验收清单）见 [docs/huawei-cloud-test-guide.md](docs/huawei-cloud-test-guide.md)。**
+
+关键前提：现有 `entry-default-signed.hap` 是 **debug 自动签名**（`debugKey`），云调试/云测试只认 **发布证书 + release 构建**；必须先按指南申请 `.cer` / `.p7b`，把 `signingConfig` 切到 `release` 再打包。
+验收点：11 列是否一次全显示（不横滑）、行高 40、字号 14、键盘弹出时表尾是否贴键盘。
 
 ### B. 本地 SDK Previewer（继续啃，可离线）
 - `hvigorw ... PreviewBuild` 生成 `.preview` 产物 → 用 `sdk\default\openharmony\previewer\common\bin\Previewer.exe` 按 800×1280 渲染

@@ -49,6 +49,7 @@ struct Index {
   @State tableGen: number = 0;
   @State errorText: string = '';
   @State menuOpen: boolean = false;
+  @State kbVisible: boolean = false;
   @State batchMenuOpen: boolean = false;
   @State menuWidth: number = 140;
   @State screenW: number = 360;
@@ -110,6 +111,15 @@ struct Index {
     // 系统键盘弹出时把窗口压扁（而不是整体上推），表尾才会露在键盘上面
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE);
+    } catch (e) {
+    }
+    // 键盘显示状态：表格里的「下一行 ▾」按钮要跟着它出现/消失
+    try {
+      window.getLastWindow(getContext(this)).then((win: window.Window) => {
+        win.on('keyboardHeightChange', (height: number) => {
+          this.kbVisible = height > 0;
+        });
+      });
     } catch (e) {
     }
     try {
@@ -521,7 +531,7 @@ struct Index {
   menuRow(item: MenuItem, isLast: boolean) {
     Row() {
       Text(item.label)
-        .fontSize(20)
+        .fontSize(18)
         .fontColor('#333333')
         .textAlign(TextAlign.Center)
         .width('100%')
@@ -551,12 +561,16 @@ struct Index {
           // 与安卓一致：左侧 20% 容器、paddingStart 8dp、图标 26×26 靠左、垂直居中
           // 点击热区给整个 20% 容器（图标只有 26dp，太小不好按）
           Row() {
-            Text('☰')
-              .fontSize(22)
-              .fontColor(Color.White)
-              .width(26)
-              .height(26)
-              .textAlign(TextAlign.Center)
+            // 自绘三横线，尺寸照安卓 ic_menu.xml：
+            // 26dp 画布 / viewport 24 → 线长 18*26/24≈19.5dp、线粗 2*26/24≈2.2dp、间距 3*26/24≈3.25dp
+            Column({ space: 3.2 }) {
+              Row().width(20).height(2.2).backgroundColor(Color.White).borderRadius(1)
+              Row().width(20).height(2.2).backgroundColor(Color.White).borderRadius(1)
+              Row().width(20).height(2.2).backgroundColor(Color.White).borderRadius(1)
+            }
+            .width(26)
+            .height(26)
+            .justifyContent(FlexAlign.Center)
           }
           .width('20%')
           .height('100%')
@@ -593,6 +607,7 @@ struct Index {
             fermentedInWater: this.fermentWater,
             fermentedInAverage: this.fermentAvg,
             refreshTick: this.refreshTick,
+            kbVisible: this.kbVisible,
             lang: this.lang,
             initVisible: this.visibleMask(),
             initFixed: this.fixedMask(),

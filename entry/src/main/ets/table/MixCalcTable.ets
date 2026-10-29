@@ -1,6 +1,7 @@
 import { FeedData } from '../model/FeedData';
 import { t } from '../common/Strings';
 import { promptAction } from '@kit.ArkUI';
+import { preferences } from '@kit.ArkData';
 
 const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
 const HEAD_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
@@ -161,6 +162,10 @@ struct HintDialog {
   title: string = '';
   message: string = '';
   confirmText: string = '知道了';
+  // 可选的第二个按钮（目前用于「查看帮助」）
+  secondaryText: string = '';
+  onConfirm: () => void = () => {};
+  onSecondary: () => void = () => {};
 
   build() {
     Column() {
@@ -183,18 +188,52 @@ struct HintDialog {
 
       Divider().strokeWidth(1).color('#E0E0E0')
 
-      Button(this.confirmText)
-        .type(ButtonType.Normal)
+      if (this.secondaryText.length > 0) {
+        Row() {
+          Button(this.secondaryText)
+            .type(ButtonType.Normal)
+            .layoutWeight(1)
+            .height(48)
+            .borderRadius(0)
+            .backgroundColor(Color.Transparent)
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#2D8C42')
+            .onClick(() => {
+              this.onSecondary();
+              this.controller?.close();
+            })
+          Divider().vertical(true).strokeWidth(1).color('#E0E0E0').height(28)
+          Button(this.confirmText)
+            .type(ButtonType.Normal)
+            .layoutWeight(1)
+            .height(48)
+            .borderRadius(0)
+            .backgroundColor(Color.Transparent)
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#2D8C42')
+            .onClick(() => {
+              this.onConfirm();
+              this.controller?.close();
+            })
+        }
         .width('100%')
-        .height(48)
-        .borderRadius(0)
-        .backgroundColor(Color.Transparent)
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#2D8C42')
-        .onClick(() => {
-          this.controller?.close();
-        })
+      } else {
+        Button(this.confirmText)
+          .type(ButtonType.Normal)
+          .width('100%')
+          .height(48)
+          .borderRadius(0)
+          .backgroundColor(Color.Transparent)
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#2D8C42')
+          .onClick(() => {
+            this.onConfirm();
+            this.controller?.close();
+          })
+      }
     }
     .width('70%')
     .backgroundColor(Color.White)
@@ -220,6 +259,7 @@ export struct MixCalcTable {
 
   @Prop @Watch('onRefreshTick') refreshTick: number = 0;
   @Prop lang: string = 'zh';
+  @Prop kbVisible: boolean = false;
   @Prop @Watch('onSettingsChanged') waterPercentage: number = 20;
   @Prop @Watch('onSettingsChanged') fermentedInWater: boolean = false;
   @Prop fermentedInAverage: boolean = false;
@@ -307,11 +347,25 @@ export struct MixCalcTable {
 
   private hintTitle: string = '';
   private hintMessage: string = '';
+  private hintSecondaryText: string = '';
+  private hintRefocus: boolean = false;
+
   private hintController: CustomDialogController = new CustomDialogController({
     builder: HintDialog({
       title: this.hintTitle,
       message: this.hintMessage,
-      confirmText: '知道了'
+      confirmText: '知道了',
+      secondaryText: this.hintSecondaryText,
+      onConfirm: () => {
+        if (this.hintRefocus) {
+          setTimeout(() => {
+            focusControl.requestFocus('cellEditor');
+          }, 120);
+        }
+      },
+      onSecondary: () => {
+        this.onHelp();
+      }
     }),
     autoCancel: true,
     customStyle: true
@@ -1174,6 +1228,55 @@ export struct MixCalcTable {
     return -1;
   }
 
+  // ===== 提示弹窗：顺序提示 / 棚号格式提示 =====
+
+  private shedHintShown: boolean = false;
+  private shedHintLoaded: boolean = false;
+
+  private loadShedHintFlag(): void {
+    if (this.shedHintLoaded) {
+      return;
+    }
+    this.shedHintLoaded = true;
+    try {
+      const store = preferences.getPreferencesSync(getContext(this), { name: 'MixCalcPrefs' });
+      this.shedHintShown = store.getSync('shed_hint_shown', false) as boolean;
+    } catch (e) {
+      this.shedHintShown = false;
+    }
+  }
+
+  private markShedHintShown(): void {
+    this.shedHintShown = true;
+    try {
+      const store = preferences.getPreferencesSync(getContext(this), { name: 'MixCalcPrefs' });
+      store.putSync('shed_hint_shown', true);
+      store.flush();
+    } catch (e) {
+    }
+  }
+
+  // 「请先填写第 N 行的棚号」：N 永远是最靠前的空行，不是被点的那一行
+  private showOrderHint(): void {
+    const firstEmpty: number = this.firstEmptyRow();
+    if (firstEmpty < 0) {
+      return;
+    }
+    this.hintTitle = t(this.lang, 'order.title');
+    this.hintMessage = t(this.lang, 'order.message').replace('%d', (firstEmpty + 1).toString());
+    this.hintSecondaryText = '';
+    this.hintRefocus = false;
+    this.hintController.open();
+  }
+
+  // 第一行棚号的格式提示：带「查看帮助」，关掉后把焦点还回输入框
+  private showShedHint(): void {
+    this.hintTitle = t(this.lang, 'shed.hintTitle');
+    this.hintMessage = t(this.lang, 'shed.hintMessage');
+    this.hintSecondaryText = t(this.lang, 'btn.viewHelp');
+    this.hintRefocus = true;
+    this.hintController.open();
+  }
   private openEditor(row: number, column: number): void {
     if (!this.isEditableColumn(column) || row < 0 || row >= this.rows.length) {
       return;
@@ -1185,10 +1288,24 @@ export struct MixCalcTable {
     // 中间某行被清空后，后面已经有数据的行照样能改，不会把人挡死
     const firstEmpty: number = this.firstEmptyRow();
     if (firstEmpty >= 0 && row > firstEmpty && !this.rowHasInput(row)) {
-      this.hintTitle = t(this.lang, 'order.title');
-      this.hintMessage = t(this.lang, 'order.message').replace('%d', (firstEmpty + 1).toString());
-      this.hintController.open();
+      this.showOrderHint();
       return;
+    }
+    // 特例：只有第一行的「棚数」要求先填棚号（其余行维持原规则）
+    if (row === 0 && column === 2) {
+      const firstRow: FeedData = this.rows[0];
+      if (firstRow.shedNumber.trim().length === 0 && firstRow.shedCount <= 0) {
+        this.showOrderHint();
+        return;
+      }
+    }
+    // 第一次点第一行「棚号」：先告诉用户怎么填（只提示一次）
+    if (row === 0 && column === 1) {
+      this.loadShedHintFlag();
+      if (!this.shedHintShown) {
+        this.markShedHintShown();
+        this.showShedHint();
+      }
     }
     // 已经在编辑这一格：只把焦点抢回来，不重置文本
     if (this.editingRow === row && this.editingCol === column) {
@@ -1778,22 +1895,25 @@ export struct MixCalcTable {
           })
 
         // 自己的「下一行」按钮：相当于回车向下，同一列下一行
-        Text('下一行 ▾')
-          .fontSize(13)
-          .fontColor(Color.White)
-          .textAlign(TextAlign.Center)
-          .width(76)
-          .height(28)
-          .backgroundColor('#2D8C42')
-          .borderRadius(14)
-          .position({
-            x: Math.max(4, this.viewW - 84),
-            y: this.hh() + Math.max(0, this.viewH - 34)
-          })
-          .zIndex(9)
-          .onClick(() => {
-            this.nextRowDown();
-          })
+        // 只在键盘弹起时显示（键盘收起就跟着隐藏，与安卓一致）
+        if (this.kbVisible) {
+          Text('下一行 ▾')
+            .fontSize(13)
+            .fontColor(Color.White)
+            .textAlign(TextAlign.Center)
+            .width(76)
+            .height(28)
+            .backgroundColor('#2D8C42')
+            .borderRadius(14)
+            .position({
+              x: Math.max(4, this.viewW - 84),
+              y: this.hh() + Math.max(0, this.viewH - 34)
+            })
+            .zIndex(9)
+            .onClick(() => {
+              this.nextRowDown();
+            })
+        }
       }
 
       // 列操作菜单
