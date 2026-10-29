@@ -1372,9 +1372,16 @@ export struct MixCalcTable {
     switch (c) {
       case 0: return this.filledRows().toString() + '/' + this.rows.length.toString();
       case 1: return t(this.lang, 'footer.help');
-      case 3: return this.formatNumber(Math.round(this.weightedAverage() * 100) / 100);
+      case 3: {
+        const avg: number = Math.round(this.weightedAverage() * 100) / 100;
+        return avg === 0 ? '0' : this.formatNumber(avg);
+      }
       case 10: return t(this.lang, 'footer.reset');
-      default: return this.formatNumber(Math.round(this.sumColumn(c) * 100) / 100);
+      default: {
+        // 表尾的料/水列没数据也要显示 0，不能留空
+        const sum: number = Math.round(this.sumColumn(c) * 100) / 100;
+        return sum === 0 ? '0' : this.formatNumber(sum);
+      }
     }
   }
 
