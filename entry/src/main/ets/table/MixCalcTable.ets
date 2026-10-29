@@ -901,6 +901,29 @@ export struct MixCalcTable {
     return result;
   }
 
+  // 「下一行」：相当于回车向下，同一列换到下一行
+  private nextRowDown(): void {
+    const now: number = Date.now();
+    if (now - this.lastNextAt < 120) {
+      return;
+    }
+    this.lastNextAt = now;
+    if (this.editDirty) {
+      this.applyEdit(this.editingText, true);
+    }
+    this.editDirty = false;
+    const col: number = this.editingCol;
+    let row: number = this.editingRow + 1;
+    while (row < this.rows.length) {
+      if (!this.isCellEnabled(this.rows[row], col)) {
+        // 这列在下面某行不能编辑，就停在原处（跟安卓回车到头一样）
+        return;
+      }
+      this.moveEditor(row, col);
+      return;
+    }
+  }
+
   private nextCell(): void {
     const now: number = Date.now();
     if (now - this.lastNextAt < 120) {
@@ -1606,8 +1629,8 @@ export struct MixCalcTable {
             this.finishEdit();
           })
 
-        // 自己的换格按钮：不碰输入法的动作键，键盘就不会收
-        Text('下一格 ▸')
+        // 自己的「下一行」按钮：相当于回车向下，同一列下一行
+        Text('下一行 ▾')
           .fontSize(13)
           .fontColor(Color.White)
           .textAlign(TextAlign.Center)
@@ -1621,7 +1644,7 @@ export struct MixCalcTable {
           })
           .zIndex(9)
           .onClick(() => {
-            this.nextCell();
+            this.nextRowDown();
           })
       }
 
