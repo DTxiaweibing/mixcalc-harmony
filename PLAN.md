@@ -35,6 +35,7 @@ _最近更新：2026-10-29_
 - [x] 水比 / 发酵料：点表头弹列表（安卓 showWaterPercentageDialog / showFermentedCalculationDialog）
 - [x] 误差显示：标题栏右侧（安卓 updateErrorDisplay）
 - [x] 表尾统计：料/水列没数据时显示 `0`（不留空）
+- [x] 列宽自适应：隐藏列后可见列按比例铺满屏宽（手机 / 平板都生效），不再出现右侧留白
 - [x] 所有弹窗压在单元格编辑框之上（开弹窗前先收编辑 + 编辑器降层级）
 
 ### 视觉

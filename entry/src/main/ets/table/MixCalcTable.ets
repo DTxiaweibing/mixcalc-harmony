@@ -413,46 +413,73 @@ export struct MixCalcTable {
       return;
     }
     this.cachedWidthKey = key;
-    if (!this.isTabletMode()) {
-      this.cachedW = [];
-      return;
-    }
-    let visibleCount: number = 0;
-    for (let i = 0; i < WIDTHS.length; i++) {
-      if (this.colShown(i)) {
-        visibleCount++;
-      }
-    }
-    if (visibleCount === 0) {
-      visibleCount = 1;
-    }
-    const base: number = this.viewW / visibleCount;
     const out: number[] = [];
-    for (let i = 0; i < WIDTHS.length; i++) {
-      if (!this.colShown(i)) {
-        out.push(0);
-        continue;
+    if (!this.isTabletMode()) {
+      // 手机：固定列宽；隐藏列后如果总宽不够，下面统一铺满
+      for (let i = 0; i < WIDTHS.length; i++) {
+        out.push(this.colShown(i) ? WIDTHS[i] : 0);
       }
-      const id: string = COLUMN_IDS[i];
-      let w: number = base;
-      if (id === 'shed_number' || id === 'weighed_feed') {
-        w = base * 1.2;
+    } else {
+      let visibleCount: number = 0;
+      for (let i = 0; i < WIDTHS.length; i++) {
+        if (this.colShown(i)) {
+          visibleCount++;
+        }
       }
-      if (id === 'seq' || id === 'average_feed') {
-        w = base * 0.8;
+      if (visibleCount === 0) {
+        visibleCount = 1;
       }
-      w = Math.max(50, Math.min(w, 120));
-      out.push(w);
-    }
-    // 总额贴合屏宽（安卓：|total - screen| > 50 时整体缩放；这里始终贴合，保证 11 列全显示）
-    let total: number = 0;
-    for (let i = 0; i < out.length; i++) {
-      total += out[i];
-    }
-    if (total > 0) {
-      const scale: number = this.viewW / total;
+      const base: number = this.viewW / visibleCount;
+      for (let i = 0; i < WIDTHS.length; i++) {
+        if (!this.colShown(i)) {
+          out.push(0);
+          continue;
+        }
+        const id: string = COLUMN_IDS[i];
+        let w: number = base;
+        if (id === 'shed_number' || id === 'weighed_feed') {
+          w = base * 1.2;
+        }
+        if (id === 'seq' || id === 'average_feed') {
+          w = base * 0.8;
+        }
+        w = Math.max(50, Math.min(w, 120));
+        out.push(w);
+      }
+      // 平板：始终贴合屏宽，保证所有可见列一次全显示
+      let total: number = 0;
       for (let i = 0; i < out.length; i++) {
-        out[i] = Math.floor(out[i] * scale);
+        total += out[i];
+      }
+      if (total > 0) {
+        const scale: number = this.viewW / total;
+        for (let i = 0; i < out.length; i++) {
+          out[i] = Math.floor(out[i] * scale);
+        }
+      }
+    }
+    // 可见列总宽 < 屏宽时按比例放大铺满（隐藏列太多时右侧会留白，看起来像少了一列）
+    let sum: number = 0;
+    let lastShown: number = -1;
+    for (let i = 0; i < out.length; i++) {
+      if (out[i] > 0) {
+        sum += out[i];
+        lastShown = i;
+      }
+    }
+    if (sum > 0 && sum < this.viewW && lastShown >= 0) {
+      const k: number = this.viewW / sum;
+      let newSum: number = 0;
+      for (let i = 0; i < out.length; i++) {
+        if (out[i] > 0) {
+          out[i] = Math.max(1, Math.floor(out[i] * k));
+          newSum += out[i];
+        }
+      }
+      // 取整误差补给最后一个可见列，正好铺满、不留缝
+      const diff: number = Math.round(this.viewW) - newSum;
+      if (diff !== 0) {
+        out[lastShown] = Math.max(1, out[lastShown] + diff);
       }
     }
     this.cachedW = out;
