@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.shrimpfarm.mixcalc",
     "vendor": "shrimpfarm",
-    "versionCode": 1000000,
-    "versionName": "1.0.0",
+    "versionCode": 1000304,
+    "versionName": "0.3.4",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
   }
