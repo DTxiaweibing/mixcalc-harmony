@@ -1699,9 +1699,9 @@ export struct MixCalcTable {
         TextInput({ text: this.editorText, controller: this.editorCtrl })
           .id('cellEditor')
           .type(this.editingCol === 1 ? InputType.Normal : InputType.NUMBER_DECIMAL)
-          // 棚号列跟安卓一样不限制字符（到/至/、/，/空格/号 都能输），由解析逻辑归一化；
-          // 其他列只收数字和小数点
-          .inputFilter(this.editingCol === 1 ? '[\\s\\S]' : '[0-9.]')
+          // 棚号列白名单：数字 + 能解析的分隔/区间符号（到 至 ~ — 、 ， , 空格 号 -），
+          // 其它字符（字母、汉字、表情等）一律打不进去；数字列只收数字和小数点
+          .inputFilter(this.editingCol === 1 ? '[0-9\\-到至~—、，, 号]' : '[0-9.]')
           .width(this.cw(this.editingCol))
           .height(this.rh())
           .fontSize(this.fs())
