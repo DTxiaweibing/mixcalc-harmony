@@ -548,16 +548,23 @@ struct Index {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
         Row() {
-          Text('☰')
-            .fontSize(22)
-            .fontColor(Color.White)
-            .width(44)
-            .width('20%')
-            .textAlign(TextAlign.Center)
-            .onClick(() => {
-              this.menuOpen = !this.menuOpen;
-              this.batchMenuOpen = false;
-            })
+          // 与安卓一致：左侧 20% 容器、paddingStart 8dp、图标 26×26 靠左、垂直居中
+          Row() {
+            Text('☰')
+              .fontSize(22)
+              .fontColor(Color.White)
+              .width(26)
+              .height(26)
+              .textAlign(TextAlign.Center)
+              .onClick(() => {
+                this.menuOpen = !this.menuOpen;
+                this.batchMenuOpen = false;
+              })
+          }
+          .width('20%')
+          .height('100%')
+          .padding({ left: 8 })
+          .justifyContent(FlexAlign.Start)
 
           Text(this.activeBatch === 0 ? t(this.lang, 'title') : t(this.lang, 'title') + ' 02')
             .fontSize(20)
@@ -565,8 +572,9 @@ struct Index {
             .layoutWeight(1)
             .textAlign(TextAlign.Center)
 
+          // 安卓这里也是 20sp（title_text_size）
           Text(this.errorText)
-            .fontSize(16)
+            .fontSize(20)
             .fontColor(Color.White)
             .width('20%')
             .height(40)
