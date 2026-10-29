@@ -908,6 +908,16 @@ export struct MixCalcTable {
       return;
     }
     this.lastNextAt = now;
+    // 跟点击格子同一套顺序规则：本行没填、下一行又是空行，就拦下来
+    const nextRowIndex: number = this.editingRow + 1;
+    const firstEmpty: number = this.firstEmptyRow();
+    if (firstEmpty >= 0 && nextRowIndex > firstEmpty
+      && nextRowIndex < this.rows.length && !this.rowHasInput(nextRowIndex)) {
+      this.hintTitle = t(this.lang, 'order.title');
+      this.hintMessage = t(this.lang, 'order.message').replace('%d', (firstEmpty + 1).toString());
+      this.hintController.open();
+      return;
+    }
     if (this.editDirty) {
       this.applyEdit(this.editingText, true);
     }
