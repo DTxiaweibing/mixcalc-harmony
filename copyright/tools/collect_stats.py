@@ -6,13 +6,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(r"D:\mixcalc-harmony")
-FILES = [
-    "AppScope/resources/base/element/string.json",
-    "entry/src/main/module.json5",
-    "entry/src/main/resources/base/profile/main_pages.json",
-    "entry/src/main/resources/base/element/string.json",
-    "entry/src/main/resources/base/element/color.json",
-]
+FILES: list[str] = []
 FILES += sorted(
     p.relative_to(ROOT).as_posix()
     for p in (ROOT / "entry/src/main/ets").rglob("*.ets")

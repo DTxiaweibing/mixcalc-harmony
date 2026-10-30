@@ -50,15 +50,8 @@ SOURCE_ORDER = [
     "entry/src/main/ets/common/Strings.ets",
 ]
 
-# 只提交运行时配置；build-profile/app/oh-package 含签名路径、本机路径或
-# 迭代版本号，不属于核心业务代码，软著源程序里剔除。
-CONFIG_FILES = [
-    "entry/src/main/module.json5",
-    "entry/src/main/resources/base/profile/main_pages.json",
-    "entry/src/main/resources/base/element/string.json",
-    "entry/src/main/resources/base/element/color.json",
-    "AppScope/resources/base/element/string.json",
-]
+# 软著源程序只提交 ArkTS 代码，不混入 JSON/JSON5 配置。
+CONFIG_FILES: list[str] = []
 
 # 仅对“提交 PDF 的内存副本”做版本显示替换，原始项目代码不改。
 # 避免源程序里出现与登记版本 V0.1 不一致的 UI 版本号。
@@ -233,6 +226,9 @@ def load_lines(files: list[Path]):
         source_lines = raw.splitlines()
         nonblank = sum(1 for item in source_lines if item.strip())
         printed = []
+        if path.suffix.lower() == ".ets":
+            # 给审查员一个明确的文件边界，不修改原始源码
+            printed.append(f"// ==================== {path.name} ====================")
         for item in source_lines:
             item = item.replace("\t", "    ").replace("\x0c", "").rstrip()
             for old, new in DISPLAY_REPLACEMENTS.items():

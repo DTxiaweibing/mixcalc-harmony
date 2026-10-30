@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fpdf import FPDF
 from fontTools.ttLib import TTFont
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 DOC_PATH = ROOT / "copyright" / "docs" / "05_软件说明书.md"
@@ -97,6 +98,11 @@ def parse_blocks(lines: list[str]) -> list[tuple[str, object]]:
                 i += 1
             if rows:
                 blocks.append(("table", rows))
+            continue
+        img = re.match(r"^!\[(.*?)\]\((.*?)\)\s*$", s)
+        if img:
+            blocks.append(("image", (clean_inline(img.group(1)), img.group(2).strip())))
+            i += 1
             continue
         if s.startswith("## "):
             blocks.append(("h1", clean_inline(s[3:])))
@@ -299,6 +305,35 @@ class ManualPDF(FPDF):
             rest = rest[best:]
         return out
 
+    def figure(self, rel_path: str, caption: str) -> None:
+        path = ROOT / rel_path
+        if not path.is_file():
+            return
+        with Image.open(path) as im:
+            iw, ih = im.size
+        width = 92.0
+        height = width * ih / iw
+        if height > 112.0:
+            height = 112.0
+            width = height * iw / ih
+        if width > 110.0:
+            width = 110.0
+            height = width * ih / iw
+        if self.get_y() + height + 14 > self.page_break_trigger:
+            self.add_page()
+        x = (PAGE_W - width) / 2
+        y = self.get_y()
+        self.image(str(path), x=x, y=y, w=width, h=height)
+        self.set_draw_color(205, 215, 208)
+        self.set_line_width(0.2)
+        self.rect(x, y, width, height)
+        self.set_y(y + height + 1.5)
+        self.set_font("FangSong", "", 9)
+        self.set_text_color(*GRAY)
+        ALL_TEXT.append(caption)
+        self.cell(0, 5, caption, align="C", new_x="LMARGIN", new_y="NEXT")
+        self.ln(3)
+
     def table(self, rows: list[list[str]]) -> None:
         if not rows:
             return
@@ -460,6 +495,9 @@ def build_body(pdf: ManualPDF, blocks: list[tuple[str, object]]) -> None:
             pdf.quote(str(value))
         elif kind == "code":
             pdf.code_block(list(value))  # type: ignore[arg-type]
+        elif kind == "image":
+            caption, rel_path = value  # type: ignore[misc]
+            pdf.figure(str(rel_path), str(caption))
         elif kind == "table":
             pdf.table(list(value))  # type: ignore[arg-type]
 

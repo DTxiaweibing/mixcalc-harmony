@@ -11,9 +11,9 @@
 | `docs/05_软件说明书.md` | 软件说明书正文，13 章 |
 | `tools/collect_stats.py` | 统计 ArkTS/配置文件行数 |
 | `tools/build_source_pdf.py` | 生成 60 页源程序 PDF（前 30 页 + 后 30 页） |
-| `tools/build_manual_pdf.py` | 把 `05_软件说明书.md` 生成 19 页说明书 PDF |
+| `tools/build_manual_pdf.py` | 把 `05_软件说明书.md` 生成 21 页说明书 PDF（含 6 张截图） |
 | `output/01_源程序_秒算虾料软件（鸿蒙版）V0.1.pdf` | 已生成，60 页；未提交 Git |
-| `output/02_软件说明书_秒算虾料软件（鸿蒙版）V0.1.pdf` | 已生成，19 页；未提交 Git |
+| `output/02_软件说明书_秒算虾料软件（鸿蒙版）V0.1.pdf` | 已生成，21 页；未提交 Git |
 
 ## 关键口径
 
@@ -23,10 +23,10 @@
 - 开发完成日期：**2026-10-30**
 - 首次发表：**未发表**
 - 包名：`com.shrimpfarm.mixcalc`
-- 源程序：9 个 `.ets` + 5 个运行时 JSON/JSON5 配置，共 14 个文件
-- 原始物理行：**3914**
-- 原始非空行：**3643**（建议填申请表）
-- 剔除注释后非空代码：**3539**
+- 源程序：9 个 `.ets` 文件（不含 JSON/JSON5 配置）
+- 原始物理行：**3863**
+- 原始非空行：**3592**（建议填申请表）
+- 剔除注释后非空代码：**3488**
 - 源程序 PDF：**60 页**，每页 50 行，前 30 页 + 后 30 页
 
 ## 生成源程序 PDF
@@ -42,11 +42,11 @@
 - `overflow_lines` 应为空；
 - `missing_glyphs` 应为空。
 
-源程序 PDF 不含 `build-profile.json5`、`AppScope/app.json5`、`oh-package.json5`（签名路径/迭代版本号不属于核心代码）；`Strings.ets` 里的 UI 版本号在 PDF 副本中显示为 V0.1，原项目代码未改。
+源程序 PDF 只包含 9 个 `.ets`，不含任何 JSON/JSON5 配置；`Strings.ets` 里的 UI 版本号在 PDF 副本中显示为 V0.1，原项目代码未改。
 
 ## 说明书 PDF
 
-正文已写在 `docs/05_软件说明书.md`，共 13 章；已生成 19 页 PDF。
+正文已写在 `docs/05_软件说明书.md`，共 13 章；已生成 21 页 PDF，含 6 张鸿蒙版实际界面截图。
 
 ```powershell
 & 'C:\Users\Administrator\AppData\Local\Programs\Python\Python313-arm64\python.exe' `
@@ -55,11 +55,11 @@
 
 检查 `copyright/build/manual_report.json`：
 
-- `pages` 应为 19；
+- `pages` 应为 21；
 - `missing_glyphs` 应为空；
 - `sections` 的章节页码应与目录一致。
 
-排版要求：封面、页眉、第 13 章版本表统一为“秒算虾料软件（鸿蒙版）V0.1”；页眉含软件名称、版本、页码。当前正文以文字和表格为主，未插入截图；如需插图，从 `entry/src/main/resources/rawfile/help/` 取鸿蒙版实际界面，不混用安卓截图。
+排版要求：封面、页眉、第 13 章版本表统一为“秒算虾料软件（鸿蒙版）V0.1”；页眉含软件名称、版本、页码。正文已插入 6 张鸿蒙版实际界面截图（表格、列菜单、发酵料设置、含水率、换料比例、换料完成），不混用安卓截图。
 
 ## 敏感信息
 
