@@ -5,9 +5,9 @@
 >
 > 维护规则：**每完成一部分就回到这个文件更新一次**（已完成 / 待办 / 待验证三块）。
 
-_最近更新：2026-10-29_
+_最近更新：2026-10-30_
 
-> 经验沉淀：**鸿蒙输入框 / 键盘 / 焦点**的坑与最终方案见 [docs/harmony-input-keyboard-notes.md](docs/harmony-input-keyboard-notes.md)（新项目或换人接手先读一遍）。
+> 经验沉淀：**鸿蒙输入框 / 键盘 / 焦点**的坑与最终方案见 [docs/harmony-input-keyboard-notes.md](docs/harmony-input-keyboard-notes.md)；**平板适配 / 全屏 / 键盘 / 上架包**见 [docs/harmony-tablet-adaptation-notes.md](docs/harmony-tablet-adaptation-notes.md)（新项目或换人接手先读一遍）。
 
 ## 已完成
 
