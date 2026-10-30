@@ -21,3 +21,8 @@ build-profile.json5.bak
 # 本地调试产物（uitest dumpLayout / 临时截图）
 /l*.json
 /snapshot*.jpeg
+
+# 软著生成物 / Python 缓存：PDF、报告、临时文本不提交
+/copyright/build
+/copyright/output
+__pycache__/
