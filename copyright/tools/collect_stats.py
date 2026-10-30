@@ -7,12 +7,7 @@ from pathlib import Path
 
 ROOT = Path(r"D:\mixcalc-harmony")
 FILES = [
-    "AppScope/app.json5",
     "AppScope/resources/base/element/string.json",
-    "build-profile.json5",
-    "oh-package.json5",
-    "entry/build-profile.json5",
-    "entry/oh-package.json5",
     "entry/src/main/module.json5",
     "entry/src/main/resources/base/profile/main_pages.json",
     "entry/src/main/resources/base/element/string.json",
