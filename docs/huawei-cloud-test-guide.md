@@ -1,7 +1,7 @@
 # 秒算虾料 · 华为云调试 / 云测试 + 发布签名 全流程
 
 > 适用工程：`D:\mixcalc-harmony`（`com.shrimpfarm.mixcalc`，0.3.4 / versionCode 1000304）
-> 目标：不买平板，用华为云真机验证平板竖屏适配；再跑一次云测试兼容性报告。
+> 目标：不买平板，用华为云真机验证平板横屏/竖屏适配；再跑一次云测试兼容性报告。
 > 说明：AGC 控制台菜单会随版本微调，找不到时按「质量 / 测试服务 → 云调试 / 云测试」这条线找；以你登录后看到的为准。
 
 ---
@@ -29,7 +29,8 @@
 | 包名 | `com.shrimpfarm.mixcalc` | AGC 里必须建同名应用，建错不能改 |
 | 版本 | `0.3.4` / `1000304` | 每轮上传建议 +1，避免缓存/重复 |
 | 设备类型 | `phone` + `tablet` | 平板能装，OK |
-| 屏幕方向 | `orientation: portrait`（锁定竖屏） | 云上转屏应保持竖屏，这是预期行为 |
+| 屏幕方向 | `orientation: auto_rotation`；手机运行时锁 `PORTRAIT`，平板 `AUTO_ROTATION` | 平板横屏/竖屏都要验；手机仍应锁竖屏 |
+| 窗口模式 | `supportWindowMode: ["fullscreen"]` | 平板应直接全屏启动，不再以自由窗口打开 |
 | SDK | `compatibleSdkVersion` / `targetSdkVersion` = `6.0.1(21)` | 云机系统必须 ≥ 6.0.1，否则装不上 |
 | 现有签名 | `build-profile.json5` 里只有 `default`，别名 `debugKey`，文件在 `C:\Users\Administrator\.ohos\config\default_mixcalc...` | **这是自动调试签名，不是发布签名** |
 | 现有 HAP | `entry/build/default/outputs/default/entry-default-signed.hap` | 由 `BUILD_MODE_NAME=debug` 构建，**云调试/云测试会拒** |
@@ -44,10 +45,10 @@
 ```
 0. 华为开发者账号 + 实名认证
 1. AGC 建项目 → 添加 HarmonyOS 应用（包名必须一致）
-2. DevEco 生成 .p12 + .csr
+2. 生成 .p12 + .csr（keytool 或 DevEco）
 3. AGC「证书」→ 新增发布证书 → 下载 .cer
 4. AGC「Profile」→ 新增发布 Profile → 下载 .p7b
-5. DevEco / build-profile 配 release 签名
+5. 配 release 签名（DevEco GUI）或直接手签（CLI）
 6. 打 release HAP（buildMode=release）
 7. AGC「质量 → 云调试」→ 选 MatePad → 上传 HAP → 手动验收
 8. 按第 11 节清单逐项截图
@@ -83,9 +84,11 @@
 
 ---
 
-## 4. 第 1 步：生成密钥和 CSR（DevEco Studio）
+## 4. 第 1 步：生成密钥和 CSR（DevEco 或 keytool）
 
 > 产出：`.p12`（私钥库）+ `.csr`（证书请求）。这两个是"根"，丢了以后无法更新应用。
+>
+> **没有 DevEco Studio？** 跳过本节，直接看 **8.5 纯 CLI 路线**：用 JDK 自带的 `keytool` 生成，效果一样。
 
 1. 打开 DevEco Studio，菜单 **Build → Generate Key and CSR**。
 2. 没有现成密钥库就选 **New**：
@@ -145,6 +148,8 @@
 ## 7. 第 4 步：工程配置 release 签名
 
 ### 7.1 推荐：DevEco 图形界面
+
+> 没有 DevEco Studio 可以跳过 7.1 / 7.2，直接走 8.5 的纯 CLI 路线（打 unsigned 包 + `hap-sign-tool` 手签）。
 
 1. **File → Project Structure → Project → Signing Configs**。
 2. 取消勾选 **Automatically generate signature**（自动签名只能出 debug，不能用于云测）。
@@ -260,7 +265,7 @@ Get-Item entry\build\default\outputs\default\entry-default-signed.hap |
 New-Item -ItemType Directory -Force dist | Out-Null
 java -jar "$root\sdk\default\openharmony\toolchains\lib\hap-sign-tool.jar" verify-app `
   -inFile "entry\build\default\outputs\default\entry-default-signed.hap" `
-  -outCertChain "dist\verify-certchain.cer" `
+  -outCertchain "dist\verify-certchain.cer" `
   -outProfile "dist\verify-profile.p7b"
 ```
 
@@ -292,6 +297,127 @@ java -jar "$root\sdk\default\openharmony\toolchains\lib\hap-sign-tool.jar" sign-
 
 > 手签适合排错/CI；第一次建议先用 8.1 让 hvigor 自动签，少一个变量。
 
+### 8.5 没有 DevEco Studio：纯 CLI 路线（keytool + hap-sign-tool）
+
+结论先说：
+
+- **能生成 `.p12` / `.csr`**：JDK 自带的 `keytool` 就能做；
+- **不能"纯 CLI 拿华为证书"**：`.cer` / `.p7b` 必须登录 AGC 网页，上传 CSR 后下载；官方没有公开的"命令行签发发布证书"接口；
+- **能纯 CLI 打包 + 签名**：`hvigorw` 出 unsigned HAP，`hap-sign-tool` 签成 release HAP。
+
+你机器上的现成路径：
+
+| 工具 | 路径 |
+|---|---|
+| JDK 21 keytool | `C:\Program Files\Java\jdk-21\bin\keytool.exe` |
+| JDK 21 java | `C:\Program Files\Java\jdk-21\bin\java.exe` |
+| hap-sign-tool | `D:\command-line-tools\command-line-tools\sdk\default\openharmony\toolchains\lib\hap-sign-tool.jar` |
+
+#### ① 生成 p12 + csr（keytool）
+
+> 不想复制命令：直接跑仓库里的 [`scripts/init-signing.ps1`](../scripts/init-signing.ps1)，按提示输入密码即可；脚本只生成 p12/csr，不保存密码。
+> 脚本是**纯 ASCII**（注释/提示全英文），Windows PowerShell 5.1 直接跑，不需要改 UTF-8 BOM。
+
+```powershell
+$jdk  = 'C:\Program Files\Java\jdk-21\bin'
+$sign = 'D:\mixcalc-sign'
+New-Item -ItemType Directory -Force $sign | Out-Null
+
+$p12Pwd = Read-Host "设置 p12 密码（至少 8 位，字母/数字/符号至少两类）"
+
+& "$jdk\keytool.exe" -genkeypair `
+  -alias "mixcalc" `
+  -keyalg EC `
+  -groupname secp256r1 `
+  -sigalg SHA256withECDSA `
+  -dname "C=CN,O=shrimpfarm,OU=mixcalc,CN=mixcalc" `
+  -keystore "$sign\mixcalc-release.p12" `
+  -storetype pkcs12 `
+  -validity 9125 `
+  -storepass $p12Pwd `
+  -keypass $p12Pwd
+
+& "$jdk\keytool.exe" -certreq `
+  -alias "mixcalc" `
+  -keystore "$sign\mixcalc-release.p12" `
+  -storetype pkcs12 `
+  -sigalg SHA256withECDSA `
+  -file "$sign\mixcalc-release.csr" `
+  -storepass $p12Pwd
+```
+
+说明：
+
+- `-validity 9125` = 25 年；`-keyalg EC` + `secp256r1` 对应 NIST-P-256，和 `SHA256withECDSA` 匹配。
+- 如果 keytool 不认 `-groupname`，去掉它；JDK 21 默认 EC 曲线就是 secp256r1。
+- p12 和 key 用同一个密码（PKCS12 不支持分开）。
+- 生成的 `.p12` 里是**自签证书**，只用于发起 CSR，不是华为认可的发布证书；华为证书要等 AGC 签发。
+
+#### ② 去 AGC 网页换 `.cer` / `.p7b`
+
+同第 5、6 节，只有两步需要浏览器：
+
+1. 证书 → 新增证书 → **发布证书** → 上传 `mixcalc-release.csr` → 下载 `mixcalc-release.cer`。
+2. Profile → 添加 → **发布** → 选应用 `com.shrimpfarm.mixcalc` + 证书 → 下载 `mixcalc-release-profile.p7b`。
+
+> 这一步替代不了：AGC 要校验你的账号、应用和 CSR，命令行没有公开接口。
+
+#### ③ 打 unsigned release HAP
+
+把 `build-profile.json5` 的 `products[0].signingConfig` 这一行删掉（或注释），让 hvigor 不签名：
+
+```powershell
+$root='D:\command-line-tools\command-line-tools'
+$env:PATH="$root\bin;$root\tool\node;$env:PATH"
+$env:DEVECO_SDK_HOME="$root\sdk"
+cd D:\mixcalc-harmony
+
+hvigorw.bat clean --no-daemon
+hvigorw.bat assembleHap --mode module -p product=default -p buildMode=release --no-daemon
+```
+
+产物：
+
+```
+entry\build\default\outputs\default\entry-default-unsigned.hap
+```
+
+#### ④ 用 hap-sign-tool 签成 release HAP
+
+```powershell
+$jar = "$root\sdk\default\openharmony\toolchains\lib\hap-sign-tool.jar"
+New-Item -ItemType Directory -Force dist | Out-Null
+
+& "$jdk\java.exe" -jar $jar sign-app `
+  -mode "localSign" `
+  -keyAlias "mixcalc" `
+  -keyPwd $p12Pwd `
+  -signAlg "SHA256withECDSA" `
+  -appCertFile "$sign\mixcalc-release.cer" `
+  -profileFile "$sign\mixcalc-release-profile.p7b" `
+  -inFile "entry\build\default\outputs\default\entry-default-unsigned.hap" `
+  -keystoreFile "$sign\mixcalc-release.p12" `
+  -keystorePwd $p12Pwd `
+  -outFile "dist\mixcalc-0.3.4-release-signed.hap"
+```
+
+> `$p12Pwd` 要和你 ① 设置的一致；新开 PowerShell 窗口就重新赋值。JDK 21 如果跑 `hap-sign-tool` 报算法/类版本错误，把 `$jdk` 换成 `C:\Program Files\Java\jdk-17\bin`。
+
+#### ⑤ 验签
+
+```powershell
+& "$jdk\java.exe" -jar $jar verify-app `
+  -inFile "dist\mixcalc-0.3.4-release-signed.hap" `
+  -outCertchain "dist\verify-certchain.cer" `
+  -outProfile "dist\verify-profile.p7b"
+```
+
+注意参数是 `-outCertchain`（小写 c），不是 `-outCertChain`；如果工具版本不认，跑 `java -jar $jar -help` 看实际参数。
+
+#### ⑥ 上传
+
+同第 9 / 10 节，传 `dist\mixcalc-0.3.4-release-signed.hap`。
+
 ---
 
 ## 9. 第 6 步：云调试（平板手动验收）
@@ -321,6 +447,8 @@ java -jar "$root\sdk\default\openharmony\toolchains\lib\hap-sign-tool.jar" sign-
 1. 点「上传应用」/「安装应用」，选 `entry-default-signed.hap`（release 包）。
 2. 上传后会自动安装。
 3. 首次进入先过隐私弹窗：同意 → 主界面。
+
+> 如果 MatePad 仍以**自由窗口**打开（标题栏有最小化/最大化/关闭），先确认 `module.json5` 的 `supportWindowMode` 是 `["fullscreen"]` 并已打进 HAP；正常应直接全屏。窗口模式下 `viewW` 是窗口内容宽度，不是屏幕物理宽度，列会按窗口铺满，看起来“没识别屏幕宽度”。
 
 **如果报错：**
 
@@ -423,6 +551,7 @@ AGC → 我的项目 → `MixCalc` → 左侧「质量」→「云测试」（�
 ### C. 单元格编辑 / 键盘
 - [ ] 点格子 → 编辑框正好盖住格子，光标在数据末尾
 - [ ] 键盘弹出 → 表尾露在键盘上方（RESIZE 生效），表格没有被顶飞
+- [ ] 平板横屏时键盘也是全宽平铺，表尾仍然在键盘上方（不是覆盖）
 - [ ] 按键盘「下一步」→ 同向右移，**键盘不闪、不收起**
 - [ ] 行末按下一步 → 换到下一行行首
 - [ ] 右下角「下一行 ▾」→ 同列向下
@@ -447,7 +576,8 @@ AGC → 我的项目 → `MixCalc` → 左侧「质量」→「云测试」（�
 ### F. 语言 / 网页 / 转屏
 - [ ] 中文/English 切换，表格和网页都跟着变
 - [ ] 帮助、隐私、协议网页能打开、能返回
-- [ ] 平板转屏后仍保持竖屏（`orientation: portrait` 的预期）
+- [ ] 平板横屏/竖屏都能铺满，11 列按当前窗口宽度均分
+- [ ] 手机仍然锁竖屏，不跟随旋转
 
 ### G. 性能 / 稳定性
 - [ ] 快速滑动表格不卡顿、不白屏
@@ -519,6 +649,60 @@ AGC → 我的项目 → `MixCalc` → 左侧「质量」→「云测试」（�
 
 ---
 
+## 16. 上架用 `.app`：CLI 一键打包
+
+云调试用的 `.hap` **不能当发布包**。AppGallery 正式发布要 `.app`：
+
+| 包型 | 用途 | 上架 |
+|---|---|---|
+| `.hap` | 单模块安装包，云调试/真机安装 | 不能直接上架 |
+| `.app` | 应用包，含 HAP + `pack.info` | AppGallery 用这个 |
+
+项目里已经放了脚本：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File D:\mixcalc-harmony\scripts\build-release-app.ps1
+```
+
+它会：
+
+1. 检查 `D:\mixcalc-sign` 里的 `mixcalc-release.p12` / `.cer` / `.p7b`；
+2. 提示输入 p12 密码；
+3. 临时注释掉 `build-profile.json5` 里的 `signingConfig`，让 hvigor 出 **unsigned** `.app`；
+4. `hvigorw clean` + `assembleApp --no-codesign`；
+5. 用 `hap-sign-tool sign-app` 对 `.app` 做发布签名；
+6. 把 `.app` 复制到 `dist`，并恢复 `build-profile.json5`。
+
+> 为什么不让 hvigor 直接签：hvigor 要求的是 DevEco 生成的**加密密码**（≥32 位 hex），命令行直接写明文会报 `00303116 The length of the storePassword or keyPassword ... is less than 32`。所以这里走“unsigned APP + hap-sign-tool 手签”。
+
+产物：
+
+```
+dist\mixcalc-<version>-release-signed.app     ← 上架传这个
+```
+
+云调试用的 `.hap` 仍用之前的 `dist\mixcalc-0.3.4-release-signed.hap`，不要混。
+
+> 脚本运行期间 `build-profile.json5` 只是把 `signingConfig` 注释掉，不写密码。如果中途 Ctrl+C/崩溃，用同目录的 `build-profile.json5.bak` 覆盖回去再删掉。
+>
+> 上架资料里的隐私政策/用户协议填**外链 URL**；应用内菜单现在打开本地 `privacy.html` / `user.html` 不影响打包。
+
+手动等价命令：
+
+```powershell
+# 1) 先保证 product 没有 signingConfig，打 unsigned APP
+hvigorw.bat assembleApp -p product=default -p buildMode=release --no-daemon --no-codesign
+
+# 2) 用 hap-sign-tool 签 APP
+java -jar hap-sign-tool.jar sign-app -mode localSign -keyAlias mixcalc -keyPwd <pwd> `
+  -signAlg SHA256withECDSA -appCertFile D:\mixcalc-sign\mixcalc-release-chain.pem `
+  -profileFile D:\mixcalc-sign\mixcalc-release-profileRelease.p7b `
+  -inFile <unsigned.app> -keystoreFile D:\mixcalc-sign\mixcalc-release.p12 `
+  -keystorePwd <pwd> -outFile dist\mixcalc-0.3.4-release-signed.app
+```
+
+---
+
 ## 附录 A：双 product 配置（可选，熟练后再用）
 
 如果不想每次改 `signingConfig`，可以给云测单独建一个 product：
@@ -587,7 +771,7 @@ entry\build\default\outputs\default\entry-default-signed.hap
 # 验签（可选）
 java -jar "$root\sdk\default\openharmony\toolchains\lib\hap-sign-tool.jar" verify-app `
   -inFile "entry\build\default\outputs\default\entry-default-signed.hap" `
-  -outCertChain "dist\verify-certchain.cer" `
+  -outCertchain "dist\verify-certchain.cer" `
   -outProfile "dist\verify-profile.p7b"
 ```
 

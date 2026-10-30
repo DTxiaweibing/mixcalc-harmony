@@ -17,7 +17,8 @@
         "label": "$string:EntryAbility_label",
         "startWindowIcon": "$media:icon",
         "startWindowBackground": "$color:start_window_background",
-        "orientation": "portrait",
+        "orientation": "auto_rotation",
+        "supportWindowMode": ["fullscreen"],
         "exported": true,
         "skills": [
           { "entities": ["entity.system.home"], "actions": ["action.system.home"] }

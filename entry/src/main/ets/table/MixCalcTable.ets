@@ -2,13 +2,13 @@ import { FeedData } from '../model/FeedData';
 import { t } from '../common/Strings';
 import { promptAction } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
+import { deviceInfo } from '@kit.BasicServicesKit';
 
 const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
 const HEAD_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
 const WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
 const ROW_H: number = 40;
 const HEAD_H: number = 40;
-const FOOT_H: number = 40;
 
 @CustomDialog
 struct CellEditorDialog {
@@ -446,8 +446,14 @@ export struct MixCalcTable {
   }
 
   // ===== 平板/手机列宽（照搬安卓 TabletLayout.computeWidths）=====
-  // 手机：固定 dp 宽度，横向滚动；平板：按可见列数均分屏宽，再按列语义微调、整体贴合屏宽
+  // 手机：固定 dp 宽度，横向滚动；平板：按当前窗口宽度均分 11 列，再按列语义微调、整体贴合屏宽
   private isTabletMode(): boolean {
+    if (deviceInfo.deviceType === 'tablet' || deviceInfo.deviceType === '2in1') {
+      return true;
+    }
+    if (deviceInfo.deviceType === 'phone') {
+      return false;
+    }
     return this.viewW >= 600;
   }
 
@@ -1336,6 +1342,7 @@ export struct MixCalcTable {
       focusControl.requestFocus('cellEditor');
     }, 60);
     this.startCaret();
+    this.ensureEditorVisible();
   }
 
   // ===== 列操作菜单 =====

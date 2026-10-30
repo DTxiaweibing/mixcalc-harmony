@@ -1,6 +1,7 @@
 import { MixCalcTable } from '../table/MixCalcTable';
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
+import { deviceInfo } from '@kit.BasicServicesKit';
 import { promptAction, router, display, window, KeyboardAvoidMode } from '@kit.ArkUI';
 import { Batch } from '../model/Batch';
 import { FeedData } from '../model/FeedData';
@@ -66,29 +67,39 @@ struct Index {
   private privacyTitle: string = '';
   private privacyBody: string = '';
 
+  // 平板模式隐藏「快捷设置」入口（与安卓平板行为一致）
+  // 云调试/部分设备的 deviceType 可能不可靠，再用屏宽兜底
+  private isTabletDevice(): boolean {
+    return deviceInfo.deviceType === 'tablet'
+      || deviceInfo.deviceType === '2in1'
+      || this.screenW >= 600;
+  }
+
   private menuItems(): MenuItem[] {
-    return [
-      new MenuItem(t(this.lang, 'menu.quick'), () => {
+    const items: MenuItem[] = [];
+    if (!this.isTabletDevice()) {
+      items.push(new MenuItem(t(this.lang, 'menu.quick'), () => {
         this.openSettings();
-      }),
-      new MenuItem(t(this.lang, 'menu.batch'), () => {
-        this.batchMenuOpen = !this.batchMenuOpen;
-      }),
-      new MenuItem(t(this.lang, 'menu.privacy'), () => {
-        this.openPage('privacy.html');
-      }),
-      new MenuItem(t(this.lang, 'menu.terms'), () => {
-        this.openPage('user.html');
-      }),
-      new MenuItem(t(this.lang, 'menu.help'), () => {
-        this.openPage('help/index.html');
-      }),
-      new MenuItem(t(this.lang, 'menu.lang'), () => {
-        this.langOpen = true;
-      }),
-      new MenuItem(t(this.lang, 'menu.version'), () => {
-      })
-    ];
+      }));
+    }
+    items.push(new MenuItem(t(this.lang, 'menu.batch'), () => {
+      this.batchMenuOpen = !this.batchMenuOpen;
+    }));
+    items.push(new MenuItem(t(this.lang, 'menu.privacy'), () => {
+      this.openPage('privacy.html');
+    }));
+    items.push(new MenuItem(t(this.lang, 'menu.terms'), () => {
+      this.openPage('user.html');
+    }));
+    items.push(new MenuItem(t(this.lang, 'menu.help'), () => {
+      this.openPage('help/index.html');
+    }));
+    items.push(new MenuItem(t(this.lang, 'menu.lang'), () => {
+      this.langOpen = true;
+    }));
+    items.push(new MenuItem(t(this.lang, 'menu.version'), () => {
+    }));
+    return items;
   }
   onPageShow(): void {
     this.applyHomeSystemBars();
@@ -108,7 +119,7 @@ struct Index {
   }
 
   async aboutToAppear(): Promise<void> {
-    // 系统键盘弹出时把窗口压扁（而不是整体上推），表尾才会露在键盘上面
+    // 手机/平板横竖屏统一用 RESIZE：键盘把页面压矮，表尾始终露在键盘上方
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE);
     } catch (e) {
