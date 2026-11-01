@@ -177,16 +177,27 @@ this.ensureEditorVisible();
 
 ## 六、平板菜单：隐藏「快捷设置」
 
+> 2026-11-01 起与安卓 0.3.5 对齐：判据改成「当前窗口是否已经铺满 11 列」，
+> 不再用 `deviceInfo.deviceType`（折叠屏外屏会被误判成平板）。
+
 ```ts
-private isTabletDevice(): boolean {
-  return deviceInfo.deviceType === 'tablet'
-    || deviceInfo.deviceType === '2in1'
-    || this.screenW >= 600;
+// common/LayoutRules.ets
+export function fillsAllColumns(visible: boolean[], widthVp: number): boolean {
+  // 还有列被隐藏 → false（必须保留快捷设置，否则没有入口恢复）
+  // 全可见 + 平板布局（>=600vp）→ true
+  // 全可见 + 手机布局 → 600vp 固定列宽 <= 当前窗口宽 才为 true
+}
+
+// pages/Index.ets
+private isQuickSettingsVisible(): boolean {
+  // 宽度用表格 via onViewWidth 回报的表体实际宽度，拿不到时退回窗口宽度
+  const width = this.tableWidth > 0 ? this.tableWidth : this.screenW;
+  return !fillsAllColumns(this.visibleMask(), width);
 }
 
 private menuItems(): MenuItem[] {
   const items: MenuItem[] = [];
-  if (!this.isTabletDevice()) {
+  if (this.isQuickSettingsVisible()) {
     items.push(new MenuItem(t(this.lang, 'menu.quick'), () => this.openSettings()));
   }
   // 批次、隐私、协议、帮助、语言、版本照旧
@@ -194,9 +205,11 @@ private menuItems(): MenuItem[] {
 }
 ```
 
-- 平板：不显示「快捷设置」；
-- 手机：仍然显示；
-- `screenW >= 600` 是 `deviceType` 不可靠时的兜底。
+- 铺满 11 列（平板 / 折叠屏内屏 / 宽窗口）：不显示「快捷设置」；
+- 手机、折叠屏外屏、窗口不足 600vp 的分屏、有列被隐藏：仍然显示；
+- `screenW` 由 `windowSizeChange` 实时更新，折叠/展开/转屏都会跟着重算；
+- 表格布局本身也改成只看窗口宽度（`viewW >= 600` 走平板布局）。
+- 2026-11-02 云调试复验：双折叠内屏 / 三折叠双屏三屏 / 平板 → 无「快捷设置」；外屏 / 单屏 / 手机 → 有。
 
 ---
 
@@ -206,7 +219,7 @@ private menuItems(): MenuItem[] {
 |---|---|---|
 | 表格只占中间一块，没铺满 | 应用在自由窗口，`viewW` 是窗口宽度 | 看标题栏是否有最大化按钮；配置 `supportWindowMode: ["fullscreen"]` |
 | 平板横屏 UI 还是竖屏 | Pad 不允许强制竖屏 | 让平板自动旋转，横屏也做布局 |
-| 11 列被裁/要横滑 | 窗口宽度 < 600，走了手机固定列宽 | 全屏/最大化；平板用 `deviceInfo` 判定 |
+| 11 列被裁/要横滑 | 窗口宽度 < 600，走了手机固定列宽 | 全屏/最大化；平板布局按**当前窗口宽度**判定（>=600vp） |
 | 键盘把表尾顶没了 | 用了 `NONE` 覆盖 | 改回 `RESIZE` |
 | 键盘弹起编辑格被挡 | 自绘表格没滚 `offsetY` | `ensureEditorVisible()` |
 | 行线发虚/断 | 浏览器缩放 + 0.5vp 边框 | 用云调试原图/设备截图判断，不要按缩放截图改代码 |

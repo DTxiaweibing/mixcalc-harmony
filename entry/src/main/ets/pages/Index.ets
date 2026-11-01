@@ -1,12 +1,12 @@
 import { MixCalcTable } from '../table/MixCalcTable';
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
-import { deviceInfo } from '@kit.BasicServicesKit';
 import { promptAction, router, display, window, KeyboardAvoidMode } from '@kit.ArkUI';
 import { Batch } from '../model/Batch';
 import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
 import { t } from '../common/Strings';
+import { LAYOUT_COLUMN_IDS, fillsAllColumns } from '../common/LayoutRules';
 import { i18n } from '@kit.LocalizationKit';
 import { util } from '@kit.ArkTS';
 
@@ -15,17 +15,20 @@ const PREF_NAME: string = 'MixCalcPrefs';
 const PRIVACY_VERSION: number = 1;
 const ROW_COUNT: number = 30;
 const TITLE_BASE: string = '养虾拌料计算器';
-const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
+const COLUMN_IDS: string[] = LAYOUT_COLUMN_IDS;
 const COLUMN_HEADS: string[] = ['序号', '棚号', '棚数', '平均', '发酵料', '粉料', '0.3料', '0.5料', '1.0料', '水', '称料'];
 const COLUMN_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
 
 class MenuItem {
   label: string;
   action: () => void;
+  // true 时点了不收起主菜单（批次子菜单要挂在主菜单旁边）
+  keepOpen: boolean;
 
-  constructor(label: string, action: () => void) {
+  constructor(label: string, action: () => void, keepOpen: boolean = false) {
     this.label = label;
     this.action = action;
+    this.keepOpen = keepOpen;
   }
 }
 
@@ -54,6 +57,8 @@ struct Index {
   @State batchMenuOpen: boolean = false;
   @State menuWidth: number = 140;
   @State screenW: number = 360;
+  // 表格表体的实际宽度（MixCalcTable.onViewWidth 回报）；判 11 列用这个，不用窗口宽度猜
+  @State tableWidth: number = 0;
   @State settingsOpen: boolean = false;
   @State settingsVersion: number = 0;
   @State refreshTick: number = 0;
@@ -67,24 +72,27 @@ struct Index {
   private privacyTitle: string = '';
   private privacyBody: string = '';
 
-  // 平板模式隐藏「快捷设置」入口（与安卓平板行为一致）
-  // 云调试/部分设备的 deviceType 可能不可靠，再用屏宽兜底
-  private isTabletDevice(): boolean {
-    return deviceInfo.deviceType === 'tablet'
-      || deviceInfo.deviceType === '2in1'
-      || this.screenW >= 600;
+  // 表格已经铺满 11 列时不再提供「快捷设置」（与安卓 0.3.5 的 isElevenColumnsFilled 一致）：
+  // 判据是「11 列全可见 + 当前窗口宽度放得下」，不是设备类型；折叠屏外屏会自动回到手机布局。
+  // 只要还有列被隐藏，入口必须保留，否则用户没有入口把列恢复回来。
+  private isQuickSettingsVisible(): boolean {
+    if (this.batches.length === 0) {
+      return true;
+    }
+    const width: number = this.tableWidth > 0 ? this.tableWidth : this.screenW;
+    return !fillsAllColumns(this.visibleMask(), width);
   }
 
   private menuItems(): MenuItem[] {
     const items: MenuItem[] = [];
-    if (!this.isTabletDevice()) {
+    if (this.isQuickSettingsVisible()) {
       items.push(new MenuItem(t(this.lang, 'menu.quick'), () => {
         this.openSettings();
       }));
     }
     items.push(new MenuItem(t(this.lang, 'menu.batch'), () => {
       this.batchMenuOpen = !this.batchMenuOpen;
-    }));
+    }, true));
     items.push(new MenuItem(t(this.lang, 'menu.privacy'), () => {
       this.openPage('privacy.html');
     }));
@@ -164,15 +172,46 @@ struct Index {
     this.syncBatchSettings();
     this.ready = true;
     this.errorText = this.computeError();
-    try {
-      const info = display.getDefaultDisplaySync();
-      const widthVp = this.getUIContext().px2vp(info.width);
-      this.menuWidth = Math.max(140, widthVp / 3);
-      this.screenW = widthVp;
-    } catch (e) {
-      this.menuWidth = 140;
-    }
+    this.initWindowMetrics();
     await this.checkPrivacyConsent();
+  }
+
+  // 窗口尺寸跟随：折叠/展开、分屏、自由窗口拖拽、转屏都会重新算一遍
+  private initWindowMetrics(): void {
+    window.getLastWindow(getContext(this)).then((win: window.Window) => {
+      this.applyWindowWidth(this.getUIContext().px2vp(win.getWindowProperties().windowRect.width));
+      win.on('windowSizeChange', (size: window.Size) => {
+        this.applyWindowWidth(this.getUIContext().px2vp(size.width));
+      });
+    }).catch((err: Error) => {
+      console.error('window metrics failed: ' + err.message);
+      // 拿不到窗口对象时退回整屏宽度，至少保证「快捷设置」入口判断不会永远停在 360
+      try {
+        const info = display.getDefaultDisplaySync();
+        this.applyWindowWidth(this.getUIContext().px2vp(info.width));
+      } catch (e) {
+        console.error('display fallback failed: ' + e);
+      }
+    });
+  }
+
+  // 宽度变了就按新窗口重算：菜单宽度、快捷设置入口（11 列判断）、快捷设置面板铺满窗口。
+  // 已打开的菜单/面板直接关掉，避免停在旧宽度、旧状态（安卓 0.3.5 dismissOpenPopups）。
+  private applyWindowWidth(widthVp: number): void {
+    if (widthVp <= 0 || Math.abs(widthVp - this.screenW) < 1) {
+      return;
+    }
+    this.screenW = widthVp;
+    this.menuWidth = Math.max(140, widthVp / 3);
+    this.menuOpen = false;
+    this.batchMenuOpen = false;
+    this.langOpen = false;
+    // 快捷设置里改的列在点「确定」前已经写进 batch，窗口一变就直接生效，避免“面板关了但表格还是旧列”
+    if (this.settingsOpen) {
+      this.settingsOpen = false;
+      this.saveAll();
+      this.rebuildTable();
+    }
   }
 
   // 首次启动（或隐私条款升版）先弹同意框，没同意不给用
@@ -552,7 +591,7 @@ struct Index {
     .justifyContent(FlexAlign.Center)
     .backgroundColor(Color.Transparent)
     .onClick(() => {
-      if (item.label !== '批次切换') {
+      if (!item.keepOpen) {
         this.menuOpen = false;
         this.batchMenuOpen = false;
       }
@@ -636,6 +675,9 @@ struct Index {
             },
             onFermentChange: (which: number) => {
               this.setFermentOption(which);
+            },
+            onViewWidth: (widthVp: number) => {
+              this.tableWidth = widthVp;
             }
           })
             .layoutWeight(1)
@@ -818,7 +860,7 @@ struct Index {
           .height(44)
           .padding({ left: 8, right: 8 })
         }
-        .width(Math.min(360, this.screenW))
+        .width('100%')
         .backgroundColor(Color.White)
         .shadow({ radius: 8, color: '#40000000', offsetX: 0, offsetY: 2 })
         .position({ x: 0, y: 40 })

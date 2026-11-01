@@ -2,11 +2,11 @@ import { FeedData } from '../model/FeedData';
 import { t } from '../common/Strings';
 import { promptAction } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
-import { deviceInfo } from '@kit.BasicServicesKit';
+import { LAYOUT_COLUMN_IDS, LAYOUT_WIDTHS, isTabletWidth, rightAlignedX } from '../common/LayoutRules';
 
-const COLUMN_IDS: string[] = ['seq', 'shed_number', 'shed_count', 'average_feed', 'fermented', 'powder', 'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'];
+const COLUMN_IDS: string[] = LAYOUT_COLUMN_IDS;
 const HEAD_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
-const WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
+const WIDTHS: number[] = LAYOUT_WIDTHS;
 const ROW_H: number = 40;
 const HEAD_H: number = 40;
 
@@ -250,6 +250,8 @@ export struct MixCalcTable {
   onColumnAction: (action: string, index: number, vis: boolean[], fix: boolean[]) => void = () => {};
   onWaterChange: (percent: number) => void = () => {};
   onFermentChange: (which: number) => void = () => {};
+  // 表体实际宽度回报给 Index：判「是否已铺满 11 列」用表格自己的宽度，不再让外面拿窗口宽度猜
+  onViewWidth: (widthVp: number) => void = () => {};
 
   initVisible: boolean[] = [];
   initFixed: boolean[] = [];
@@ -446,15 +448,25 @@ export struct MixCalcTable {
   }
 
   // ===== 平板/手机列宽（照搬安卓 TabletLayout.computeWidths）=====
-  // 手机：固定 dp 宽度，横向滚动；平板：按当前窗口宽度均分 11 列，再按列语义微调、整体贴合屏宽
+  // 手机：固定 vp 宽度，横向滚动；平板：按当前窗口宽度均分 11 列，再按列语义微调、整体贴合屏宽
   private isTabletMode(): boolean {
-    if (deviceInfo.deviceType === 'tablet' || deviceInfo.deviceType === '2in1') {
-      return true;
+    // 只看当前窗口宽度（与安卓 0.3.5 一致）：折叠屏外屏约 370vp 会自动回到手机布局
+    return isTabletWidth(this.viewW);
+  }
+
+  // 窗口宽度变了（折叠/展开、分屏、转屏）：列宽会按新窗宽重算，贴表头的弹窗先关掉，避免停在旧位置
+  private applyViewSize(widthVp: number, heightVp: number): void {
+    const widthChanged: boolean = Math.abs(widthVp - this.viewW) >= 1;
+    this.viewW = widthVp;
+    this.viewH = heightVp;
+    if (widthChanged) {
+      this.colMenuOpen = false;
+      this.pickOpen = false;
+      this.ratioOpen = false;
+      this.onViewWidth(widthVp);
     }
-    if (deviceInfo.deviceType === 'phone') {
-      return false;
-    }
-    return this.viewW >= 600;
+    // 变宽后旧的横向滚动量可能超出新内容宽，不收就会在右侧留一条空白
+    this.clampOffsets();
   }
 
   private colShown(index: number): boolean {
@@ -468,7 +480,7 @@ export struct MixCalcTable {
   private cachedWidthKey: string = '';
 
   private ensureWidths(): void {
-    const key: string = Math.round(this.viewW).toString() + '|' + this.vis.join(',');
+    const key: string = Math.round(this.viewW * 10).toString() + '|' + this.vis.join(',');
     if (key === this.cachedWidthKey) {
       return;
     }
@@ -1346,7 +1358,17 @@ export struct MixCalcTable {
   }
 
   // ===== 列操作菜单 =====
-  private showColumnMenu(index: number, x: number): void {
+  // 列菜单和水比/发酵料弹窗共用同一个宽度（与安卓 listPopupWidth 一致）
+  private listPopupWidth(): number {
+    return Math.min(200, this.viewW);
+  }
+
+  // 弹窗右边缘对齐被点的表头单元格（安卓 P1），靠左的列夹到 0，靠右的列不超出屏幕
+  private popupXFor(col: number, popupWidth: number): number {
+    return rightAlignedX(this.columnLeft(col) + this.cw(col), popupWidth, this.viewW);
+  }
+
+  private showColumnMenu(index: number): void {
     if (index === 0) {
       return;
     }
@@ -1361,7 +1383,7 @@ export struct MixCalcTable {
       t(this.lang, 'col.showAll'),
       t(this.lang, 'col.unfixAllCols')
     ];
-    this.colMenuX = Math.max(0, Math.min(x, Math.max(0, this.viewW - 200)));
+    this.colMenuX = this.popupXFor(index, this.listPopupWidth());
     this.colMenuOpenedAt = Date.now();
     this.colMenuOpen = true;
   }
@@ -1399,7 +1421,7 @@ export struct MixCalcTable {
   }
 
   // ===== 水 / 发酵料 =====
-  private showWaterPicker(index: number, x: number): void {
+  private showWaterPicker(col: number): void {
     this.finishEdit();
     const items: string[] = [];
     for (let pct = 10; pct <= 40; pct += 5) {
@@ -1408,12 +1430,12 @@ export struct MixCalcTable {
     }
     this.pickKind = 'water';
     this.pickTitle = t(this.lang, 'water.title');    this.pickItems = items;
-    this.pickX = Math.max(0, Math.min(x, Math.max(0, this.viewW - 200)));
+    this.pickX = this.popupXFor(col, this.listPopupWidth());
     this.pickOpenedAt = Date.now();
     this.pickOpen = true;
   }
 
-  private showFermentPicker(index: number, x: number): void {
+  private showFermentPicker(col: number): void {
     this.finishEdit();
     this.pickKind = 'ferment';
     this.pickTitle = t(this.lang, 'ferment.title');
@@ -1423,7 +1445,7 @@ export struct MixCalcTable {
       (this.fermentedInAverage ? '● ' : '○ ') + t(this.lang, 'ferment.inAvg'),
       (this.fermentedInAverage ? '○ ' : '● ') + t(this.lang, 'ferment.exAvg')
     ];
-    this.pickX = Math.max(0, Math.min(x, Math.max(0, this.viewW - 200)));
+    this.pickX = this.popupXFor(col, this.listPopupWidth());
     this.pickOpenedAt = Date.now();
     this.pickOpen = true;
   }
@@ -1685,17 +1707,16 @@ export struct MixCalcTable {
         color: col === 4 && this.fermentedInAverage ? '#6E511E' : '#000000'
       })
       .onClick(() => {
-        const x: number = this.columnLeft(col);
         if (col === 9) {
-          this.showWaterPicker(col, x);
+          this.showWaterPicker(col);
         } else if (col === 4) {
-          this.showFermentPicker(col, x);
+          this.showFermentPicker(col);
         }
       })
       .gesture(
         LongPressGesture({ duration: 350 })
           .onAction(() => {
-            this.showColumnMenu(col, this.columnLeft(col));
+            this.showColumnMenu(col);
           })
       )
   }
@@ -1779,8 +1800,7 @@ export struct MixCalcTable {
         .backgroundColor(Color.White)
         .clip(true)
         .onAreaChange((_oldValue: Area, newValue: Area) => {
-          this.viewW = Number(newValue.width);
-          this.viewH = Number(newValue.height);
+          this.applyViewSize(Number(newValue.width), Number(newValue.height));
         })
         .gesture(
           PanGesture()
@@ -1965,7 +1985,7 @@ export struct MixCalcTable {
             }
           }, (item: string, index: number) => item + index.toString())
         }
-        .width(200)
+        .width(this.listPopupWidth())
         .backgroundColor(Color.White)
         .borderRadius(12)
         .clip(true)
@@ -2014,7 +2034,7 @@ export struct MixCalcTable {
             }
           }, (item: string, index: number) => item + index.toString())
         }
-        .width(Math.min(200, this.viewW))
+        .width(this.listPopupWidth())
         .backgroundColor(Color.White)
         .borderRadius(12)
         .clip(true)
