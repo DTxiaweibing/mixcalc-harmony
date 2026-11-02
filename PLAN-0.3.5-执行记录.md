@@ -235,3 +235,8 @@ hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no
 
 - 桌面应用名仍为「秒算虾料」品牌名，不跟随 App 内语言切换；安卓英文桌面的 `ShrimpCalc` 属于系统资源，不在本轮“应用内英文”范围。
 
+### 待办
+
+- `dist/` 里的 `0.3.5 release` APP/HAP 是英文修改前生成的，上架前需用 `scripts/build-release-app.ps1` 重打（脚本会询问 p12 密码）；
+- 本次只重打了 debug HAP，并已更新 `dist/mixcalc-0.3.5-debug-signed.hap`，可直接用于手机测试。
+
