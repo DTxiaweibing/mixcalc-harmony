@@ -196,3 +196,42 @@ hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no
 - 打 release 包：`scripts/build-release-app.ps1` → `dist/mixcalc-0.3.5-release-signed.app` + `.hap`；
 - 提交并推送到两个远端：`origin`（GitHub `DTxiaweibing/mixcalc-harmony`）、`gitee`（`xia-guard/mixcalc-harmony`）。
 
+---
+
+## 英文文案对齐安卓（2026-11-02 追加）
+
+### 范围
+
+以安卓 `app/src/main/res/values-en/strings.xml` 为准，逐项核对鸿蒙 `Strings.ets` 与硬编码文案；只改英文显示，不改业务逻辑、不改中文文案含义。
+
+### 改了什么
+
+| 文件 | 改动 |
+|---|---|
+| `common/Strings.ets` | `title` / `menu.quick` / `menu.privacy` / `menu.terms` / `menu.version` / 列名 / 列操作 / 快捷设置 / 批次 / 键盘 / 水比 / 发酵料 / 重置提示等英文改为安卓原文；补 `water.header`、`pad.clear`、`pad.next`、`pad.nextRow`、`btn.gotIt`、`privacy.loadFail` |
+| `pages/Index.ets` | 删除 `TITLE_BASE` / `COLUMN_HEADS` 硬编码；列显示/隐藏提示、批次标题改走 `t()`；隐私加载失败改走 `privacy.loadFail` |
+| `table/MixCalcTable.ets` | 单元格编辑按钮「取消 / 确定」、提示「知道了」、水比表头、列操作标题、自定义面板「清空 / 下一步」、编辑态「下一行 ▾」全部走 `t()`；`CellEditorDialog` 增加 `lang` |
+
+### 英文页面核对
+
+- `rawfile/en/help/index.html`、`rawfile/en/privacy.html`、`rawfile/en/user.html` 与安卓 `assets/en/` 同名文件 **SHA-256 完全一致**；
+- `rawfile/en/privacy_consent.txt` 与安卓 `assets/en/privacy_consent.txt` **SHA-256 完全一致**；
+- 应用内英文文案不再从 `Strings.ets` 之外硬编码中文。
+
+### 验证
+
+```powershell
+$root='D:\command-line-tools\command-line-tools'
+$env:PATH="$root\bin;$root\tool\node;$env:PATH"; $env:DEVECO_SDK_HOME="$root\sdk"
+cd D:\mixcalc-harmony
+hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no-daemon
+```
+
+- 编译：**BUILD SUCCESSFUL**（仅既有 deprecated API 告警）；
+- 真机：`hdc tconn 192.168.10.103:42085` → `hdc install -r entry-default-signed.hap` 安装成功，启动正常，PID 已确认；
+- 版本：`0.3.5 / versionCode 1000305`。
+
+### 未改
+
+- 桌面应用名仍为「秒算虾料」品牌名，不跟随 App 内语言切换；安卓英文桌面的 `ShrimpCalc` 属于系统资源，不在本轮“应用内英文”范围。
+

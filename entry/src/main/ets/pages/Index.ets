@@ -14,9 +14,7 @@ const PREF_NAME: string = 'MixCalcPrefs';
 // 隐私政策版本：改了条款就 +1，老用户升级后会重新弹
 const PRIVACY_VERSION: number = 1;
 const ROW_COUNT: number = 30;
-const TITLE_BASE: string = '养虾拌料计算器';
 const COLUMN_IDS: string[] = LAYOUT_COLUMN_IDS;
-const COLUMN_HEADS: string[] = ['序号', '棚号', '棚数', '平均', '发酵料', '粉料', '0.3料', '0.5料', '1.0料', '水', '称料'];
 const COLUMN_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
 
 class MenuItem {
@@ -242,7 +240,7 @@ struct Index {
     if (lines.length < 3) {
       // 文案读不到就不能算同意过：提示后退出，等用户重试
       promptAction.showToast({
-        message: this.lang === 'en' ? 'Failed to load the privacy text' : '隐私政策文案读取失败',
+        message: t(this.lang, 'privacy.loadFail'),
         duration: 3000
       });
       const ctx2 = getContext(this) as common.UIAbilityContext;
@@ -532,9 +530,9 @@ struct Index {
     }
     if (index >= 0 && index < COLUMN_IDS.length) {
       if (action === "sync-shown") {
-        this.toast(COLUMN_HEADS[index] + "列已显示");
+        this.toast(t(this.lang, 'toast.shown'));
       } else if (action === "sync-hidden") {
-        this.toast(COLUMN_HEADS[index] + "列已隐藏");
+        this.toast(t(this.lang, 'toast.hidden'));
       }
     }
     this.saveAll();
@@ -576,7 +574,7 @@ struct Index {
   }
 
   private batchTitle(index: number): string {
-    return index === 0 ? '批次01' : '批次02';
+    return t(this.lang, index === 0 ? 'batch.01' : 'batch.02');
   }
 
   onPageHide(): void {

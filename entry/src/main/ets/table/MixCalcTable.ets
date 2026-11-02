@@ -16,6 +16,7 @@ struct CellEditorDialog {
   title: string = '';
   initValue: string = '';
   isNumber: boolean = false;
+  lang: string = 'zh';
   onConfirm: (value: string) => void = () => {};
   @State input: string = '';
 
@@ -46,7 +47,7 @@ struct CellEditorDialog {
         })
 
       Row() {
-        Button('取消')
+        Button(t(this.lang, 'btn.cancel'))
           .type(ButtonType.Normal)
           .layoutWeight(1)
           .height(44)
@@ -61,7 +62,7 @@ struct CellEditorDialog {
 
         Divider().vertical(true).height(44).strokeWidth(1).color('#E0E0E0')
 
-        Button('确定')
+        Button(t(this.lang, 'btn.ok'))
           .type(ButtonType.Normal)
           .layoutWeight(1)
           .height(44)
@@ -323,6 +324,7 @@ export struct MixCalcTable {
       title: this.editorTitle,
       initValue: this.editorValue,
       isNumber: this.editorIsNumber,
+      lang: this.lang,
       onConfirm: (value: string) => {
         this.applyEdit(value);
       }
@@ -356,7 +358,7 @@ export struct MixCalcTable {
     builder: HintDialog({
       title: this.hintTitle,
       message: this.hintMessage,
-      confirmText: '知道了',
+      confirmText: t(this.lang, 'btn.gotIt'),
       secondaryText: this.hintSecondaryText,
       onConfirm: () => {
         if (this.hintRefocus) {
@@ -640,7 +642,7 @@ export struct MixCalcTable {
   // ===== 文案与数值 =====
   private headLabel(col: number): string {
     if (col === 9) {
-      return t(this.lang, 'col.water') + this.waterPercentage.toString() + '%';
+      return t(this.lang, 'water.header').replace('%d', this.waterPercentage.toString());
     }
     return t(this.lang, HEAD_KEYS[col]);
   }
@@ -988,10 +990,10 @@ export struct MixCalcTable {
         this.padFn('\u232B', () => {
           this.padBackspace();
         })
-        this.padFn('清空', () => {
+        this.padFn(t(this.lang, 'pad.clear'), () => {
           this.padClear();
         })
-        Text('下一步')
+        Text(t(this.lang, 'pad.next'))
           .width('100%')
           .height(110)
           .margin(3)
@@ -1376,7 +1378,7 @@ export struct MixCalcTable {
     const fixed: boolean = this.isFixed(index);
     const visible: boolean = this.isVisible(index);
     this.colMenuIndex = index;
-    this.colMenuTitle = t(this.lang, 'dlg.colOps') + this.headLabel(index);
+    this.colMenuTitle = t(this.lang, 'dlg.colOps').replace('%s', this.headLabel(index));
     this.colMenuItems = [
       fixed ? t(this.lang, 'col.unfix') : t(this.lang, 'col.fix'),
       visible ? t(this.lang, 'col.hide') : t(this.lang, 'col.show'),
@@ -1924,7 +1926,7 @@ export struct MixCalcTable {
         // 自己的「下一行」按钮：相当于回车向下，同一列下一行
         // 只在键盘弹起时显示（键盘收起就跟着隐藏，与安卓一致）
         if (this.kbVisible) {
-          Text('下一行 ▾')
+          Text(t(this.lang, 'pad.nextRow') + ' ▾')
             .fontSize(13)
             .fontColor(Color.White)
             .textAlign(TextAlign.Center)
