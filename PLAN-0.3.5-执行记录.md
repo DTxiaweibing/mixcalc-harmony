@@ -193,7 +193,7 @@ hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no
 ## 收尾（2026-11-02）
 
 - `AppScope/app.json5` 定版 `versionName 0.3.5 / versionCode 1000305`；
-- 打 release 包：`scripts/build-release-app.ps1` → `dist/mixcalc-0.3.5-release-signed.app` + `.hap`；
+- 打 release 包：`scripts/build-release-app.ps1` → `dist/mixcalc-0.3.5-release-signed.app` + `.hap`（2026-11-02 19:50 已按最终英文版重打）；
 - 提交并推送到两个远端：`origin`（GitHub `DTxiaweibing/mixcalc-harmony`）、`gitee`（`xia-guard/mixcalc-harmony`）。
 
 ---
@@ -242,8 +242,25 @@ hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no
 
 - 桌面应用名只在英文系统下变 `ShrimpCalc`；中文系统仍为「秒算虾料」品牌名。
 
-### 待办
+### 最终打包（2026-11-02 19:50）
 
-- `dist/` 里的 `0.3.5 release` APP/HAP 是英文修改前生成的，上架前需用 `scripts/build-release-app.ps1` 重打（脚本会询问 p12 密码）；
-- 本次只重打了 debug HAP，并已更新 `dist/mixcalc-0.3.5-debug-signed.hap`，可直接用于手机测试。
+**调试包**
+
+- 文件：`dist/mixcalc-0.3.5-debug-signed.hap`
+- 签名：DevEco 自动调试证书（debug）
+- 用途：手机 / 平板 / 云调试安装
+- 已安装到 nova 15，`versionName 0.3.5 / versionCode 1000305`，启动正常
+
+**发布包**
+
+- APP：`dist/mixcalc-0.3.5-release-signed.app`（AppGallery 上传用这个）
+- HAP：`dist/mixcalc-0.3.5-release-signed.hap`（云调试 / 企业分发测试用）
+- 签名：`D:\mixcalc-sign\mixcalc-release.p12` + release profile
+- `build-profile.json5` 的 `signingConfig` 已恢复为 `default`，不会留下 unsigned 构建状态
+
+**签名选择**
+
+- 调试安装 → debug 签名 HAP；
+- 应用市场 → release 签名 APP；
+- 普通手机直接点 release HAP 仍会报 `9568322 not trusted app source`，这是手机不信任本机 release 证书，不是包坏了；云调试/上架走对应渠道即可。
 

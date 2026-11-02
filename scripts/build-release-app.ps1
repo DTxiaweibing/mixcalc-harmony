@@ -52,7 +52,11 @@ if (-not (Test-Path $chain)) {
   $chain = $cer
 }
 
-$p12Pwd = Read-Host 'p12 password'
+# Prefer env var for CLI automation; fall back to prompt.
+$p12Pwd = $env:MIXCALC_P12_PWD
+if ([string]::IsNullOrWhiteSpace($p12Pwd)) {
+  $p12Pwd = Read-Host 'p12 password'
+}
 if ([string]::IsNullOrWhiteSpace($p12Pwd)) {
   throw 'p12 password is empty.'
 }
