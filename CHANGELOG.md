@@ -17,7 +17,8 @@
 - 手机（含折叠屏单屏态）方向在 `loadContent` 之前就锁为竖屏，不再出现「先按横屏建窗、再转回竖屏」。
 - **英文界面下帮助 / 隐私政策 / 用户协议显示中文**：网页页统一按当前语言优先取 `rawfile/en/` 下的同名文件，缺失才回退中文（与安卓 `AssetWebViewActivity.resolveAssetPath()` 一致）。
 - **英文界面剩余文案全部照搬安卓**：菜单、列操作、表头水比、批次标题、单元格编辑按钮、下一行按钮、快捷设置、重置/提示弹窗、发酵料设置等统一使用安卓 `values-en` 的英文；同时去掉 `Index` / `MixCalcTable` 里最后几处硬编码中文，隐私加载失败提示改成安卓原文。
-- **英文系统下桌面名改为 ShrimpCalc**：`AppScope/resources/en` 与 `entry/src/main/resources/en` 增加英文应用名/入口标签资源；中文系统仍显示「秒算虾料」。
+- **撤回英文包名 ShrimpCalc**：AGC 解析包名时优先取了英文 `app_name`，导致上传预览变英文；已删除英文应用名/入口标签资源，包名和桌面名回到「秒算虾料」，应用内英文不受影响。
+- **手机启动方向**：`module.json5` 的 `orientation` 改为 `portrait`，手机启动直接按竖屏建窗，不再先横屏闪一下再转竖；平板仍在运行时切 `AUTO_ROTATION`。
 
 ### 优化
 

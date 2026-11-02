@@ -231,25 +231,30 @@ hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no
 - 真机：`hdc tconn 192.168.10.103:42085` → `hdc install -r entry-default-signed.hap` 安装成功，启动正常，PID 已确认；
 - 版本：`0.3.5 / versionCode 1000305`。
 
-### 英文应用名（2026-11-02 追加）
+### 应用名与 AGC 解析（2026-11-02 撤回 ShrimpCalc）
 
-- 新增 `AppScope/resources/en/element/string.json`：`app_name = ShrimpCalc`；
-- 新增 `entry/src/main/resources/en/element/string.json`：`module_desc` / `EntryAbility_desc` / `EntryAbility_label = ShrimpCalc`，`title_main = Mix Calculator`；
-- 资源限定符用 `en`（语言级），英文系统 / 英文区域都会命中；中文系统仍回退 `base` 的「秒算虾料」；
-- 重新编译 `BUILD SUCCESSFUL`，已安装到 nova 15 并启动。
+- 曾新增 `AppScope/resources/en` 的 `app_name = ShrimpCalc`，以及 `entry/resources/en` 的入口英文标签；
+- 上传 AGC 后发现：**包解析/预览优先取了英文 `app_name`，显示成 ShrimpCalc**，不是以前的中文名；
+- 已删除两处英文应用名/入口标签资源，包内只保留 `base` 的「秒算虾料」；
+- 应用内英文不受影响：`Strings.ets` 和 `rawfile/en/` 仍完整；
+- 重新打 release HAP 后检查 `resources.index`：`ShrimpCalc` 已不存在，AGC 解析会回中文名。
 
-### 未改
+**结论：应用市场包名优先中文，不再保留英文桌面名；如果以后要英文桌面名，只能另做渠道包，不能和中文包名共用同一个包。**
 
-- 桌面应用名只在英文系统下变 `ShrimpCalc`；中文系统仍为「秒算虾料」品牌名。
+### 启动方向修复（2026-11-02）
 
-### 最终打包（2026-11-02 19:50）
+- `module.json5` 的 ability `orientation` 从 `auto_rotation` 改为 `portrait`：手机启动时系统直接按竖屏创建启动窗口，不再先横屏闪一下再转竖；
+- `EntryAbility` 仍在运行时把平板/折叠屏内屏设为 `AUTO_ROTATION`，平板横竖屏自适应不变；
+- 已在 nova 15 上重装 debug 包，启动方向正常。
+
+### 最终打包（2026-11-02 20:18）
 
 **调试包**
 
 - 文件：`dist/mixcalc-0.3.5-debug-signed.hap`
 - 签名：DevEco 自动调试证书（debug）
 - 用途：手机 / 平板 / 云调试安装
-- 已安装到 nova 15，`versionName 0.3.5 / versionCode 1000305`，启动正常
+- 已安装到 nova 15，`versionName 0.3.5 / versionCode 1000305`，启动方向与界面正常
 
 **发布包**
 

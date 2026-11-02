@@ -27,7 +27,8 @@ export default class EntryAbility extends UIAbility {
       console.error('getMainWindowSync failed: ' + e);
       return;
     }
-    // 手机（含折叠屏单屏态）锁竖屏；平板跟随系统自动旋转，横屏竖屏都用满窗口宽度
+    // module.json5 先按竖屏创建启动窗口，手机（含折叠屏单屏态）不会先横后竖闪一下；
+    // 平板在这里改回自动旋转，横屏竖屏都用满窗口宽度。
     const isPhone: boolean = deviceInfo.deviceType === 'phone';
     win.setPreferredOrientation(
       isPhone ? window.Orientation.PORTRAIT : window.Orientation.AUTO_ROTATION
