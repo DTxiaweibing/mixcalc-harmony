@@ -231,9 +231,16 @@ hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no
 - 真机：`hdc tconn 192.168.10.103:42085` → `hdc install -r entry-default-signed.hap` 安装成功，启动正常，PID 已确认；
 - 版本：`0.3.5 / versionCode 1000305`。
 
+### 英文应用名（2026-11-02 追加）
+
+- 新增 `AppScope/resources/en/element/string.json`：`app_name = ShrimpCalc`；
+- 新增 `entry/src/main/resources/en/element/string.json`：`module_desc` / `EntryAbility_desc` / `EntryAbility_label = ShrimpCalc`，`title_main = Mix Calculator`；
+- 资源限定符用 `en`（语言级），英文系统 / 英文区域都会命中；中文系统仍回退 `base` 的「秒算虾料」；
+- 重新编译 `BUILD SUCCESSFUL`，已安装到 nova 15 并启动。
+
 ### 未改
 
-- 桌面应用名仍为「秒算虾料」品牌名，不跟随 App 内语言切换；安卓英文桌面的 `ShrimpCalc` 属于系统资源，不在本轮“应用内英文”范围。
+- 桌面应用名只在英文系统下变 `ShrimpCalc`；中文系统仍为「秒算虾料」品牌名。
 
 ### 待办
 
