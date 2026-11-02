@@ -27,10 +27,10 @@
 | 项目 | 现状 | 对云测的影响 |
 |---|---|---|
 | 包名 | `com.shrimpfarm.mixcalc` | AGC 里必须建同名应用，建错不能改 |
-| 版本 | `0.3.4` / `1000304` | 每轮上传建议 +1，避免缓存/重复 |
+| 版本 | `0.3.5` / `1000305` | 每轮上传建议 +1，避免缓存/重复 |
 | 设备类型 | `phone` + `tablet` | 平板能装，OK |
-| 屏幕方向 | `orientation: auto_rotation`；手机运行时锁 `PORTRAIT`，平板 `AUTO_ROTATION` | 平板横屏/竖屏都要验；手机仍应锁竖屏 |
-| 窗口模式 | `supportWindowMode: ["fullscreen"]` | 平板应直接全屏启动，不再以自由窗口打开 |
+| 屏幕方向 | `module.json5` 写 `orientation: portrait`；手机运行时锁 `PORTRAIT`，平板 `AUTO_ROTATION` | 平板横屏/竖屏都要验；手机启动不再先横屏 |
+| 窗口模式 | `supportWindowMode: ["fullscreen", "split"]`，平板启动调 `maximize()` | 默认全屏，同时允许用户手动分屏 |
 | SDK | `compatibleSdkVersion` / `targetSdkVersion` = `6.0.1(21)` | 云机系统必须 ≥ 6.0.1，否则装不上 |
 | 现有签名 | `build-profile.json5` 里只有 `default`，别名 `debugKey`，文件在 `C:\Users\Administrator\.ohos\config\default_mixcalc...` | **这是自动调试签名，不是发布签名** |
 | 现有 HAP | `entry/build/default/outputs/default/entry-default-signed.hap` | 由 `BUILD_MODE_NAME=debug` 构建，**云调试/云测试会拒** |
@@ -448,7 +448,7 @@ New-Item -ItemType Directory -Force dist | Out-Null
 2. 上传后会自动安装。
 3. 首次进入先过隐私弹窗：同意 → 主界面。
 
-> 如果 MatePad 仍以**自由窗口**打开（标题栏有最小化/最大化/关闭），先确认 `module.json5` 的 `supportWindowMode` 是 `["fullscreen"]` 并已打进 HAP；正常应直接全屏。窗口模式下 `viewW` 是窗口内容宽度，不是屏幕物理宽度，列会按窗口铺满，看起来“没识别屏幕宽度”。
+> 如果 MatePad 仍以**自由窗口**打开（标题栏有最小化/最大化/关闭），先确认 `module.json5` 的 `supportWindowMode` 是 `["fullscreen", "split"]`、`EntryAbility` 启动时调用了 `maximize()`，并已打进 HAP；正常应直接全屏。窗口模式下 `viewW` 是窗口内容宽度，不是屏幕物理宽度，列会按窗口铺满，看起来“没识别屏幕宽度”。
 
 **如果报错：**
 

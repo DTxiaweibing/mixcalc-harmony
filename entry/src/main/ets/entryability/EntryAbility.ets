@@ -3,6 +3,8 @@ import { window } from '@kit.ArkUI';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 
 export default class EntryAbility extends UIAbility {
+  private maximizeStarted: boolean = false;
+
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
   }
 
@@ -43,5 +45,16 @@ export default class EntryAbility extends UIAbility {
     }).catch((e: BusinessError) => {
       console.error('setWindowSystemBarProperties failed: ' + e.code);
     });
+    // supportWindowMode 里加了 split 后，系统可能恢复上次的分屏状态。
+    // 平板启动时主动最大化一次，保证默认全屏；用户仍可在使用中手动分屏。
+    // FOLLOW_APP_IMMERSIVE_SETTING：保留应用自己设置的状态栏/导航栏，不强制沉浸。
+    if (!isPhone && !this.maximizeStarted) {
+      this.maximizeStarted = true;
+      win.maximize(window.MaximizePresentation.FOLLOW_APP_IMMERSIVE_SETTING)
+        .catch((e: BusinessError) => {
+          this.maximizeStarted = false;
+          console.error('maximize failed: ' + e.code);
+        });
+    }
   }
 }

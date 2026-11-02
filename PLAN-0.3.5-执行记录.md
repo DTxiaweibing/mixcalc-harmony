@@ -247,7 +247,15 @@ hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no
 - `EntryAbility` 仍在运行时把平板/折叠屏内屏设为 `AUTO_ROTATION`，平板横竖屏自适应不变；
 - 已在 nova 15 上重装 debug 包，启动方向正常。
 
-### 最终打包（2026-11-02 20:18）
+### 分屏支持与启动最大化（2026-11-02 21:30）
+
+- `module.json5` 的 `supportWindowMode` 从 `["fullscreen"]` 改为 `["fullscreen", "split"]`：允许分屏，手机/平板都能用系统分屏；
+- `EntryAbility` 在平板启动时调用 `win.maximize(MaximizePresentation.FOLLOW_APP_IMMERSIVE_SETTING)`：如果系统恢复了上次的分屏状态，启动时主动最大化回全屏；用户使用中仍可手动分屏；
+- 手机不调用 `maximize`，避免影响手机的全屏/分屏行为；
+- 真机 `bm dump` 已确认安装包 `supportWindowMode` 为 `[0, 1]`（fullscreen + split）；
+- 已重新安装 debug HAP，release 包同步重打。
+
+### 最终打包（2026-11-02 21:37）
 
 **调试包**
 

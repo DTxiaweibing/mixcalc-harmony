@@ -8,9 +8,9 @@
 
 ## 一、先记住这 6 条
 
-1. **手机锁竖屏，平板自动旋转**：`module.json5` 用 `auto_rotation`，运行时再按 `deviceInfo.deviceType` 把手机锁成 `PORTRAIT`。
-2. **不要试图强制平板竖屏**：第三方应用在 Pad 上强制不了整机方向；`orientation: portrait` 只会让竖屏应用在横屏时居中留边。
-3. **平板要“启动即全屏”**：`supportWindowMode: ["fullscreen"]`。默认值包含 `split`/`floating`，平板可能以自由窗口启动。
+1. **手机启动竖屏，平板自动旋转**：`module.json5` 先写 `portrait`，避免手机启动先横屏闪一下；运行时再按 `deviceInfo.deviceType` 给平板切 `AUTO_ROTATION`。
+2. **不要试图强制平板竖屏**：第三方应用在 Pad 上强制不了整机方向；`orientation: portrait` 只用于启动首帧，平板运行时必须切回自动旋转。
+3. **平板要“启动即全屏”，同时允许用户分屏**：`supportWindowMode: ["fullscreen", "split"]`，并在 `EntryAbility` 启动时对平板调用 `maximize()`；只写 `["fullscreen"]` 会彻底禁用分屏。
 4. **11 列按“当前窗口宽度”算，不是物理屏幕宽度**：`viewW` 是窗口内容宽度。自由窗口下它小于屏幕宽度，表格按窗口铺满是对的；最大化/全屏后自然变成整屏宽度。
 5. **键盘统一用 `RESIZE`**：平板横屏也是全宽平铺键盘，平台审核要求；`RESIZE` 让页面变矮、表尾留在键盘上方。不要用 `NONE` 覆盖，否则表尾被盖住。
 6. **别拿表格的 `viewH` 判断平板**：`viewH` 会随键盘压缩变化，可能把平板误判成手机。用 `deviceInfo` 或窗口/屏幕尺寸判断。
@@ -24,13 +24,13 @@
 `entry/src/main/module.json5`：
 
 ```json5
-"orientation": "auto_rotation",
-"supportWindowMode": ["fullscreen"],
+"orientation": "portrait",
+"supportWindowMode": ["fullscreen", "split"],
 ```
 
 ### 2.2 运行时按设备类型设置
 
-`EntryAbility.onWindowStageCreate`，`loadContent` 成功后：
+`EntryAbility.onWindowStageCreate`，`loadContent` 之前：
 
 ```ts
 import { deviceInfo } from '@kit.BasicServicesKit';
@@ -40,10 +40,13 @@ const isPhone = deviceInfo.deviceType === 'phone';
 win.setPreferredOrientation(
   isPhone ? window.Orientation.PORTRAIT : window.Orientation.AUTO_ROTATION
 ).catch(() => {});
+if (!isPhone) {
+  win.maximize(window.MaximizePresentation.FOLLOW_APP_IMMERSIVE_SETTING).catch(() => {});
+}
 ```
 
 - 手机：`PORTRAIT`，横过来也不跟着转；
-- 平板：`AUTO_ROTATION`，横竖屏都跟随系统；
+- 平板：`AUTO_ROTATION`，横竖屏都跟随系统；启动时 `maximize()` 回到全屏；
 - `2in1` / `default`：按自动旋转处理。
 
 ### 2.3 为什么不能强制平板竖屏
@@ -57,7 +60,7 @@ Pad 的规格是：竖屏应用在横屏时**居中显示/留边**，系统不�
 
 ---
 
-## 三、启动即全屏：`supportWindowMode`
+## 三、启动即全屏，但允许分屏：`supportWindowMode` + `maximize()`
 
 ### 3.1 问题现象
 
@@ -78,13 +81,31 @@ Pad 的规格是：竖屏应用在横屏时**居中显示/留边**，系统不�
 "supportWindowMode": ["fullscreen"]
 ```
 
-系统才会直接全屏启动，不需要用户去智慧多窗里点最大化。
+系统会直接全屏启动，但**分屏也被一起禁用了**。
 
-### 3.3 注意
+### 3.3 现在的方案
 
-- 这个配置会**禁用分屏/悬浮窗**，是产品取舍；表格类应用通常可以接受。
-- 如果重打包后仍是小窗口：确认 `module.json5` 真的打进 HAP、云调试没有缓存旧包；必要时升 `versionCode` 再传。
-- 不要依赖 `targetAPIVersion >= 15` 的默认行为，显式写 `["fullscreen"]` 最稳。
+```json5
+"supportWindowMode": ["fullscreen", "split"]
+```
+
+启动时在 `EntryAbility` 里对平板调用：
+
+```ts
+win.maximize(window.MaximizePresentation.FOLLOW_APP_IMMERSIVE_SETTING)
+```
+
+效果：
+
+- 默认启动全屏；
+- 用户仍可在使用中手动分屏；
+- 手机不调用 `maximize()`，避免影响手机的分屏/全屏行为。
+
+### 3.4 注意
+
+- `maximize()` 在部分设备/窗口状态会返回 `801 Capability not supported` 或 `1300002`，必须 `catch`，不能让它影响启动；
+- 如果重打包后仍是小窗口：确认 `module.json5` 真的打进 HAP、云调试没有缓存旧包；必要时升 `versionCode` 再传；
+- 只写 `["fullscreen"]` 是最稳的“禁止分屏”方案，但产品要允许分屏时不能这么写。
 
 ---
 
@@ -217,7 +238,7 @@ private menuItems(): MenuItem[] {
 
 | 现象 | 真正原因 | 处理 |
 |---|---|---|
-| 表格只占中间一块，没铺满 | 应用在自由窗口，`viewW` 是窗口宽度 | 看标题栏是否有最大化按钮；配置 `supportWindowMode: ["fullscreen"]` |
+| 表格只占中间一块，没铺满 | 应用在自由窗口，`viewW` 是窗口宽度 | 确认 `supportWindowMode: ["fullscreen", "split"]` 且平板启动调用了 `maximize()`；看标题栏是否有最大化按钮 |
 | 平板横屏 UI 还是竖屏 | Pad 不允许强制竖屏 | 让平板自动旋转，横屏也做布局 |
 | 11 列被裁/要横滑 | 窗口宽度 < 600，走了手机固定列宽 | 全屏/最大化；平板布局按**当前窗口宽度**判定（>=600vp） |
 | 键盘把表尾顶没了 | 用了 `NONE` 覆盖 | 改回 `RESIZE` |
@@ -276,4 +297,4 @@ dist/mixcalc-<version>-release-signed.hap
 
 ## 十、一句话版本
 
-**手机锁竖屏；平板 `auto_rotation` + `supportWindowMode: ["fullscreen"]`；11 列按当前 `viewW` 均分；键盘横竖屏都用 `RESIZE`，表尾永远在键盘上方。**
+**手机启动竖屏；平板运行时 `auto_rotation` + 启动 `maximize()`；`supportWindowMode: ["fullscreen", "split"]`；11 列按当前 `viewW` 均分；键盘横竖屏都用 `RESIZE`，表尾永远在键盘上方。**

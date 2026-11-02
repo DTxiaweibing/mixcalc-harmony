@@ -50,16 +50,17 @@ _最近更新：2026-11-02_
 - [x] 英文界面文案对齐安卓 `values-en`：菜单 / 列操作 / 表头 / 批次 / 键盘 / 水比 / 发酵料 / 重置 / 隐私加载失败全部照搬，去掉硬编码中文
 - [x] 撤回英文包名 `ShrimpCalc`：AGC 会优先解析英文 `app_name`，已删英文应用名资源，包名/桌面名回到「秒算虾料」；应用内英文保留
 - [x] 手机启动方向：`module.json5` 改 `portrait`，启动不再先横屏再转竖；平板运行时仍自动旋转
+- [x] 允许分屏：`supportWindowMode` 改为 `fullscreen + split`；平板启动主动最大化，用户仍可手动分屏
 
 ### 系统与合规
 - [x] 菜单 / 帮助网页 / 隐私 / 协议 / 网页系统栏
 - [x] 重置弹窗、列表弹窗、确认弹窗（安卓规格复用）
 - [x] 语言切换（跟随系统/中文/English，app_language，@Prop lang 不闪屏）
 - [x] 首次启动隐私同意弹窗（85% 宽、标题 18、正文 13、正文内协议名可点、拒绝退出、按 `privacy_version` 记忆）
-- [x] 手机锁竖屏；平板自动旋转（`module.json5` → `auto_rotation` + `EntryAbility` 按 `deviceInfo` 运行时设置）
+- [x] 手机启动竖屏、平板自动旋转（`module.json5` 先 `portrait`，`EntryAbility` 按 `deviceInfo` 给平板切 `AUTO_ROTATION`）
       · 平板横屏/竖屏都按当前窗口宽度均分 11 列，不再出现“横屏窗口套竖屏 UI”
-- [x] 启动即全屏：`module.json5` → `supportWindowMode: ["fullscreen"]`
-      · 不再依赖用户在智慧多窗里手动最大化；待重打云调试复验
+- [x] 启动即全屏且允许分屏：`supportWindowMode: ["fullscreen", "split"]`，平板启动 `maximize()`
+      · 用户仍可手动分屏；手机不调用 maximize
 - [x] 手机/平板横竖屏统一用 `KeyboardAvoidMode.RESIZE`：键盘把页面压矮，表尾始终露在键盘上方
       · 平板横屏也是全宽平铺键盘，不采用 NONE 覆盖；横竖屏只影响 11 列宽度计算
 

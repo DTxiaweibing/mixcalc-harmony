@@ -18,7 +18,7 @@
         "startWindowIcon": "$media:start_transparent",
         "startWindowBackground": "$color:start_window_background",
         "orientation": "portrait",
-        "supportWindowMode": ["fullscreen"],
+        "supportWindowMode": ["fullscreen", "split"],
         "exported": true,
         "skills": [
           { "entities": ["entity.system.home"], "actions": ["action.system.home"] }
