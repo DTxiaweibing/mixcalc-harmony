@@ -1,7 +1,7 @@
 import { MixCalcTable } from '../table/MixCalcTable';
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
-import { promptAction, router, display, window, KeyboardAvoidMode } from '@kit.ArkUI';
+import { promptAction, router, window, KeyboardAvoidMode } from '@kit.ArkUI';
 import { Batch } from '../model/Batch';
 import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
@@ -49,13 +49,11 @@ struct Index {
   private store: preferences.Preferences | null = null;
   private batches: Batch[] = [];
   @State activeBatch: number = 0;
-  @State ready: boolean = false;
   @State tableGen: number = 0;
   @State errorText: string = '';
   @State menuOpen: boolean = false;
   @State kbVisible: boolean = false;
   @State batchMenuOpen: boolean = false;
-  @State menuWidth: number = 140;
   @State screenW: number = 360;
   // 表格表体的实际宽度（MixCalcTable.onViewWidth 回报）；判 11 列用这个，不用窗口宽度猜
   @State tableWidth: number = 0;
@@ -71,6 +69,12 @@ struct Index {
   @State privacyOpen: boolean = false;
   private privacyTitle: string = '';
   private privacyBody: string = '';
+
+  // 菜单宽度永远按当前窗口宽度实时算，不做缓存：
+  // 转屏 / 折叠 / 分屏之后不会留着旧方向的值（旧实现缓存到 @State，事件一丢就永久错）。
+  private menuWidth(): number {
+    return Math.max(140, this.screenW / 3);
+  }
 
   // 表格已经铺满 11 列时不再提供「快捷设置」（与安卓 0.3.5 的 isElevenColumnsFilled 一致）：
   // 判据是「11 列全可见 + 当前窗口宽度放得下」，不是设备类型；折叠屏外屏会自动回到手机布局。
@@ -132,25 +136,17 @@ struct Index {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE);
     } catch (e) {
     }
-    // 键盘显示状态：表格里的「下一行 ▾」按钮要跟着它出现/消失
-    try {
-      window.getLastWindow(getContext(this)).then((win: window.Window) => {
-        win.on('keyboardHeightChange', (height: number) => {
-          this.kbVisible = height > 0;
-        });
-      });
-    } catch (e) {
-    }
+    this.initWindowListeners();
+    // 先把两个空批次摆好，让首帧就能画出表格骨架：整页不再被 preferences 读取卡住，
+    // 系统启动页（现在是纯色、无图标）一撤就是 UI，和安卓「先出界面再填数据」一致。
+    this.batches = this.emptyBatches();
     try {
       const ctx = getContext(this) as common.UIAbilityContext;
       this.store = await preferences.getPreferences(ctx, PREF_NAME);
       this.batches = await BatchStore.load(this.store, ROW_COUNT);
       this.activeBatch = await BatchStore.loadActive(this.store);
     } catch (e) {
-      this.batches = [];
-      for (let i = 0; i < BATCH_COUNT; i++) {
-        this.batches.push(new Batch(ROW_COUNT));
-      }
+      // 读失败时保留首帧那两个空批次，界面照样可用
     }
     let saved: string = '';
     try {
@@ -170,39 +166,47 @@ struct Index {
       }
     }
     this.syncBatchSettings();
-    this.ready = true;
     this.errorText = this.computeError();
-    this.initWindowMetrics();
+    // 数据到位后用真实批次重建一次表格（首帧用的是空批次）
+    this.rebuildTable();
     await this.checkPrivacyConsent();
   }
 
-  // 窗口尺寸跟随：折叠/展开、分屏、自由窗口拖拽、转屏都会重新算一遍
-  private initWindowMetrics(): void {
-    window.getLastWindow(getContext(this)).then((win: window.Window) => {
-      this.applyWindowWidth(this.getUIContext().px2vp(win.getWindowProperties().windowRect.width));
-      win.on('windowSizeChange', (size: window.Size) => {
-        this.applyWindowWidth(this.getUIContext().px2vp(size.width));
-      });
-    }).catch((err: Error) => {
-      console.error('window metrics failed: ' + err.message);
-      // 拿不到窗口对象时退回整屏宽度，至少保证「快捷设置」入口判断不会永远停在 360
-      try {
-        const info = display.getDefaultDisplaySync();
-        this.applyWindowWidth(this.getUIContext().px2vp(info.width));
-      } catch (e) {
-        console.error('display fallback failed: ' + e);
-      }
-    });
+  private emptyBatches(): Batch[] {
+    const list: Batch[] = [];
+    for (let i = 0; i < BATCH_COUNT; i++) {
+      list.push(new Batch(ROW_COUNT));
+    }
+    return list;
   }
 
-  // 宽度变了就按新窗口重算：菜单宽度、快捷设置入口（11 列判断）、快捷设置面板铺满窗口。
-  // 已打开的菜单/面板直接关掉，避免停在旧宽度、旧状态（安卓 0.3.5 dismissOpenPopups）。
+  // 键盘高度 -> 「下一行 ▾」按钮显示；windowSizeChange 作为根布局回调的兜底，
+  // 两者都只负责把当前宽度交给 applyWindowWidth（幂等，重复调用无副作用）
+  private initWindowListeners(): void {
+    try {
+      window.getLastWindow(getContext(this)).then((win: window.Window) => {
+        win.on('keyboardHeightChange', (height: number) => {
+          this.kbVisible = height > 0;
+        });
+        win.on('windowSizeChange', (size: window.Size) => {
+          this.applyWindowWidth(this.getUIContext().px2vp(size.width));
+        });
+      }).catch((err: Error) => {
+        console.error('window listeners failed: ' + err.message);
+      });
+    } catch (e) {
+      console.error('window listeners failed: ' + e);
+    }
+  }
+
+  // 窗口宽度变了就按新宽度重算「快捷设置」入口（11 列判断），菜单宽度由 menuWidth() 实时算。
+  // 宽度来源是根布局的 onAreaChange：转屏、折叠、分屏、自由窗口拖拽都会回调，
+  // 比 windowRect 采样 + windowSizeChange 可靠（转屏时窗口事件可能不派发，宽度会永远停在旧方向）。
   private applyWindowWidth(widthVp: number): void {
     if (widthVp <= 0 || Math.abs(widthVp - this.screenW) < 1) {
       return;
     }
     this.screenW = widthVp;
-    this.menuWidth = Math.max(140, widthVp / 3);
     this.menuOpen = false;
     this.batchMenuOpen = false;
     this.langOpen = false;
@@ -564,7 +568,9 @@ struct Index {
     router.pushUrl({
       url: 'pages/WebPage',
       params: {
-        route: route
+        route: route,
+        // WebPage 按这个决定用 rawfile/en/ 还是 rawfile/（与安卓 AssetWebViewActivity 一致）
+        lang: this.lang
       }
     });
   }
@@ -649,8 +655,7 @@ struct Index {
         .height(40)
         .backgroundColor($r('app.color.title_bar_bg'))
 
-        if (this.ready) {
-          ForEach([this.tableGen], (gen: number) => {
+        ForEach([this.tableGen], (gen: number) => {
           MixCalcTable({
             rows: this.currentBatch().rows,
             waterPercentage: this.waterPct,
@@ -683,7 +688,6 @@ struct Index {
             .layoutWeight(1)
             .width('100%')
           }, (gen: number) => 'tbl' + gen.toString())
-        }
       }
       .width('100%')
       .height('100%')
@@ -704,7 +708,7 @@ struct Index {
             this.menuRow(item, index === this.menuItems.length - 1)
           }, (item: MenuItem) => item.label)
         }
-        .width(this.menuWidth)
+        .width(this.menuWidth())
         .backgroundColor(Color.White)
         .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
         .position({ x: 0, y: 40 })
@@ -749,7 +753,7 @@ struct Index {
           .borderRadius(12)
           .clip(true)
           .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
-          .position({ x: this.menuWidth, y: 80 })
+          .position({ x: this.menuWidth(), y: 80 })
         }
       }
 
@@ -1033,5 +1037,10 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+    // 窗口宽度只认布局回调：转屏 / 折叠 / 分屏 / 自由窗口拖拽都会触发，
+    // 不会像 windowSizeChange 那样在「启动即转屏」时丢掉事件（表格也是用这条路拿宽度）
+    .onAreaChange((_oldValue: Area, newValue: Area) => {
+      this.applyWindowWidth(Number(newValue.width));
+    })
   }
 }

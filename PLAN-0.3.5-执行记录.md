@@ -136,6 +136,60 @@ hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no
 
 ---
 
+## 启动期与英文页面修复（2026-11-02 追加）
+
+### 现象
+
+1. 冷启动会先闪应用图标（白底）再进表格；
+2. 手机横着拿再启动，出来后抽屉菜单特别宽（截图实测 **269vp**），
+3. 切到英文后，「帮助 / 隐私政策 / 用户协议」仍然是中文页。
+
+### 根因（有设备证据）
+
+- **菜单宽度**：截图里菜单右边缘 ≈ 809px ≈ 269vp，而 `269 × 3 ≈ 806vp`，
+  正好是这块屏 `2412px ÷ 3` 的**横屏**宽度；同一张图里表格却是手机布局
+  （40/60vp 固定列宽 + 横向滚动），说明表格拿到的 361vp 是对的。
+  → 坏的只有 `Index` 这一路宽度：它来自 `window.getWindowProperties()` 一次性采样
+  + `windowSizeChange` 事件；启动时窗口先按横屏创建，转屏后事件没有派发，
+  宽度就永久停在 806vp。菜单宽度又是从这个坏值缓存到 `@State` 的，所以一直错。
+- **启动闪图标**：`module.json5` 的 `startWindowIcon` 指向应用图标，启动页背景是纯白，
+  与首帧 `page_bg` 不一致；且 `Index` 用 `if (this.ready)` 门控整个表格，
+  要等 preferences 读完才渲染，启动页停留时间被拉长。
+- **英文页面**：`rawfile/en/` 下三个英文页本来就有（与安卓 `assets/en/` 一一对应），
+  但 `openPage()` 永远只传中文路径，`WebPage` 也没有语言判断。
+
+### 改法
+
+- 宽度唯一来源改为**根布局 `onAreaChange`**（和表格同一条路），`windowSizeChange` 仅作兜底；
+  两个源头都只写 `screenW`，幂等。菜单宽度不再缓存，改为 `menuWidth()` 实时算
+  `Math.max(140, screenW / 3)`。删除 `display.getDefaultDisplaySync()` 兜底。
+- `EntryAbility`：`setPreferredOrientation` / `setWindowSystemBarProperties` 提到
+  `loadContent` **之前**（`loadContent` 回调里再调一次，幂等），手机锁竖屏、
+  平板/折叠屏内屏跟随系统自动旋转。
+- 启动页：新增 8×8 全透明 `start_transparent.png`，`startWindowIcon` 指向它；
+  `start_window_background` 白 → `#F5F5F5`（照抄安卓 `AppTheme.NoWindowBackground`）。
+- `Index.aboutToAppear()` 先塞两个空 `Batch` 再读 preferences，删掉 `if (this.ready)`，
+  首帧即出标题栏 + 表格骨架，数据到位后 `rebuildTable()`。
+- `Index.openPage()` 增加 `lang` 参数；`WebPage.resolveRoute()` 用
+  `resourceManager.getRawFileContentSync('en/' + route)` 探测存在性，存在即用英文页，
+  否则回退中文（与安卓 `resolveAssetPath()` 等价）。
+
+### nova 15 真机验证（1084×2412 px，3.0 密度 ≈ 361vp）
+
+| 项 | 结果 |
+|---|---|
+| 冷启动 | 直接出 UI（标题栏 + 表格），菜单默认关闭；连拍 5 帧未见图标 / 白屏 |
+| 抽屉菜单宽度 | 菜单项 bounds 全为 `[0,×][420,×]` → 420px = **140vp** = `max(140, 361/3)`；旧版是 269vp |
+| 菜单第一项 | 「快捷设置」在（宽度与表格同源，不再误判成「已铺满 11 列」） |
+| 版本文案 | `版本:v0.3.5` |
+| 英文界面 | 切 English 后菜单为 `Quick settings / Switch batch / Privacy policy / Help / Language`；打开 Privacy policy 显示英文 "Privacy Policy"，Help 显示英文 "Help" 且图片正常 |
+| hilog | 无 mixcalc / shrimpfarm 相关 Error |
+| 横握冷启动 | 用户真机确认「nova 15 一切正常」 |
+
+用户明确：**版本号不再升级**，就用 0.3.5 出 release 包上传应用市场（当前市场是 0.3.4）。
+
+---
+
 ## 收尾（2026-11-02）
 
 - `AppScope/app.json5` 定版 `versionName 0.3.5 / versionCode 1000305`；
