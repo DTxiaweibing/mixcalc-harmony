@@ -7,6 +7,7 @@ import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
 import { t } from '../common/Strings';
 import { LAYOUT_COLUMN_IDS, fillsAllColumns, isTabletWidth } from '../common/LayoutRules';
+import { applyHomeBars, TABLE_BOTTOM_COLOR } from '../common/WindowChrome';
 import { i18n } from '@kit.LocalizationKit';
 import { util } from '@kit.ArkTS';
 
@@ -65,6 +66,9 @@ struct Index {
   @State langPref: string = '';
   @State langOpen: boolean = false;
   @State privacyOpen: boolean = false;
+  // 边到边避让高度（px，由 WindowChrome 合入 AppStorage）：状态栏 / 导航条（含手势条）
+  @StorageProp('insetTopPx') insetTopPx: number = 0;
+  @StorageProp('insetBottomPx') insetBottomPx: number = 0;
   private privacyTitle: string = '';
   private privacyBody: string = '';
 
@@ -122,15 +126,16 @@ struct Index {
 
   private applyHomeSystemBars(): void {
     window.getLastWindow(getContext(this)).then((win) => {
-      win.setWindowSystemBarProperties({
-        statusBarColor: '#1F6B30',
-        statusBarContentColor: '#FFFFFF',
-        navigationBarColor: '#FFFFFF',
-        navigationBarContentColor: '#000000'
-      });
+      // 颜色在 WindowChrome 里和标题栏 / 表尾共用同一份常量，避免系统栏和页面差一个色号
+      applyHomeBars(win);
     }).catch((err: Error) => {
       console.error('home system bars failed: ' + err.message);
     });
+  }
+
+  // 避让高度以 px 存在 AppStorage 里，布局统一换成 vp
+  private insetVp(px: number): number {
+    return px > 0 ? this.getUIContext().px2vp(px) : 0;
   }
 
   async aboutToAppear(): Promise<void> {
@@ -655,7 +660,9 @@ struct Index {
             .textAlign(TextAlign.Center)
         }
         .width('100%')
-        .height(40)
+        // 边到边：高度补上状态栏避让高度，背景铺到屏幕顶边；内容行仍是 40vp
+        .height(40 + this.insetVp(this.insetTopPx))
+        .padding({ top: this.insetVp(this.insetTopPx) })
         .backgroundColor($r('app.color.title_bar_bg'))
 
         ForEach([this.tableGen], (gen: number) => {
@@ -691,6 +698,13 @@ struct Index {
             .layoutWeight(1)
             .width('100%')
           }, (gen: number) => 'tbl' + gen.toString())
+
+        // 边到边：表尾背景延伸到导航条 / 手势条区域。
+        // 这块只是屏幕底部的底色，不参与任何交互；避让高度为 0 时高度也是 0，不占位。
+        Column()
+          .width('100%')
+          .height(this.insetVp(this.insetBottomPx))
+          .backgroundColor(TABLE_BOTTOM_COLOR)
       }
       .width('100%')
       .height('100%')

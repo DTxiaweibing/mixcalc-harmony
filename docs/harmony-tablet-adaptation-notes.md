@@ -289,6 +289,7 @@ dist/mixcalc-<version>-release-signed.hap
 | 方向 / 全屏 / 窗口模式 | `entry/src/main/module.json5` |
 | 手机锁竖屏、平板自动旋转 | `entry/src/main/ets/entryability/EntryAbility.ets` |
 | 键盘避让、平板菜单 | `entry/src/main/ets/pages/Index.ets` |
+| 边到边 / 系统栏颜色 / 避让高度 | `entry/src/main/ets/common/WindowChrome.ets` |
 | 11 列宽度、编辑格滚动 | `entry/src/main/ets/table/MixCalcTable.ets` |
 | 云调试 / 签名 / 上架 | `docs/huawei-cloud-test-guide.md` |
 | 输入框 / 键盘 / 焦点 | `docs/harmony-input-keyboard-notes.md` |
@@ -298,3 +299,27 @@ dist/mixcalc-<version>-release-signed.hap
 ## 十、一句话版本
 
 **手机启动竖屏；平板运行时 `auto_rotation` + 启动 `maximize()`；`supportWindowMode: ["fullscreen", "split"]`；11 列按当前 `viewW` 均分；键盘横竖屏都用 `RESIZE`，表尾永远在键盘上方。**
+
+---
+
+## 十一、边到边（沉浸式）
+
+### 11.1 结论
+
+`setWindowLayoutFullScreen(true)` + **避让高度 padding**，不要指望 `expandSafeArea`。
+
+`expandSafeArea` 只扩展**绘制**区域，不会把布局内容挪开：标题栏是 40vp、表尾是行高，都是固定尺寸，属性挂上去等于没效果，内容照样被状态栏 / 手势条压住。固定尺寸的条要用 padding 把内容让出来、背景自己铺满。
+
+### 11.2 三条硬规则
+
+1. **系统栏颜色必须和应用自己画的背景同色**（`statusBarColor` = 标题栏色、`navigationBarColor` = 表尾色）。否则背景铺上去了，系统栏还是另一条色，看着还是两截。
+2. **避让高度用 `getWindowAvoidArea` 取，并且必须监听 `avoidAreaChange`**。转屏、折叠展开、分屏、切三键/手势导航都会变；只在启动时取一次，用户一折叠就错位。
+3. **底部取 `max(TYPE_SYSTEM.bottomRect, TYPE_NAVIGATION_INDICATOR.bottomRect)`**：三键导航塞在 `TYPE_SYSTEM` 里，手势条才是 `TYPE_NAVIGATION_INDICATOR`，两个都读才不漏。
+
+### 11.3 坑
+
+- `getWindowAvoidArea` 返回的是 **px**，布局是 vp，必须 `px2vp`；忘了换算会多出三四倍空白。
+- `height(40 + inset)` + `padding({top: inset})` 才等价于「内容行 40vp + 背景垫到顶」；只加 padding 不补 height，ArkUI 的 padding 在尺寸内，内容会被压扁。
+- `avoidAreaChange` 在 `loadContent` 之前拿不到准值，要在 `loadContent` 回调里再 `syncInsets()` 一次兜底。
+- 系统栏颜色别在三个页面各写一份（现在是 `WindowChrome.ets` 一份），否则改色必漏。
+- 沉浸式之后**横屏挖孔**的左右避让要想清楚做不做；当前手机锁竖屏、平板横屏通常无孔，所以没做。

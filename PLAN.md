@@ -5,7 +5,7 @@
 >
 > 维护规则：**每完成一部分就回到这个文件更新一次**（已完成 / 待办 / 待验证三块）。
 
-_最近更新：2026-11-02_
+_最近更新：2026-11-04_
 
 > 经验沉淀：**鸿蒙输入框 / 键盘 / 焦点**的坑与最终方案见 [docs/harmony-input-keyboard-notes.md](docs/harmony-input-keyboard-notes.md)；**平板适配 / 全屏 / 键盘 / 上架包**见 [docs/harmony-tablet-adaptation-notes.md](docs/harmony-tablet-adaptation-notes.md)（新项目或换人接手先读一遍）。
 > **0.3.5 对齐安卓的改动与验证记录**见 [PLAN-0.3.5-执行记录.md](PLAN-0.3.5-执行记录.md)。
@@ -52,6 +52,7 @@ _最近更新：2026-11-02_
 - [x] 手机启动方向：`module.json5` 改 `portrait`，启动不再先横屏再转竖；平板运行时仍自动旋转
 - [x] 允许分屏：`supportWindowMode` 改为 `fullscreen + split`；平板启动主动最大化，用户仍可手动分屏
 - [x] 抽屉菜单宽度：手机 1/3；平板或 11 列全显 1/4（双折叠内屏同规则）
+- [x] 边到边（沉浸式）：标题栏背景延伸到状态栏、表尾背景延伸到导航条，内容全部留在安全区；系统栏颜色与页面共用一份常量（见「P4 边到边适配」）
 
 ### 系统与合规
 - [x] 菜单 / 帮助网页 / 隐私 / 协议 / 网页系统栏
@@ -103,6 +104,7 @@ _最近更新：2026-11-02_
       · APP 打包脚本：`scripts/build-release-app.ps1`（CLI，打 unsigned APP + hap-sign-tool 手签，产出 `dist/*.app`）
       · 2026-10-30 已跑通：`dist/mixcalc-0.3.4-release-signed.app`（待 AGC 上传验证内层 HAP 签名）
       · 注意：hvigor 直接签名要 DevEco 加密密码，明文会报 `00303116`；所以走 unsigned APP + `hap-sign-tool`
+7. [ ] P4 边到边真机 / 云调试目视：顶部只有一条绿、底部表尾到屏幕底边、「帮助 / 重置」不被手势条压住（见「P4」验收）
 
 ## 下一步工作计划（2026-10-31，P0/P1 已于 2026-11-01 实现）
 
@@ -365,6 +367,53 @@ mode = preferSystem ? SYSTEM
 - P2 完成后：用上面用例 + 现有顺序录入/批次/语言/键盘回归；
 - 版本号：P0/P1 可出 0.3.5；P1.5 单独出 0.4.0；P2 单独出 0.5.0；
 - 每次更新同步 `CHANGELOG.md` 和应用市场“用户版更新说明”。
+
+### P4 边到边（沉浸式）适配（2026-11-04）
+
+**状态：已实现，CLI 编译通过（2026-11-04）；待真机 / 云调试目视确认**
+
+**现状（对照边到边设计文档逐条核对）**
+- `EntryAbility` 只调 `setWindowSystemBarProperties`（状态栏 `#1F6B30`、导航栏 `#FFFFFF`）；全仓库没有 `setWindowLayoutFullScreen` / `expandSafeArea` / `getWindowAvoidArea` / `avoidAreaChange`；
+- 页面仍是系统默认安全区布局：标题栏从状态栏下方开始，表格底边到导航栏上方为止；
+- 结果：顶部是「`#1F6B30` 状态栏 + `#2D8C42` 标题栏」两条色带，底部是「表格 + 白色导航栏」，背景没有贯通。
+
+**目标（文档里的三条）**
+1. 顶部：标题栏背景画到屏幕顶边，标题 / 菜单按钮仍在状态栏下方；
+2. 中部：表格内容不进系统区域（不压到状态栏、不压到手势条）；
+3. 底部：表尾背景画到屏幕底边，表尾里的「帮助 / 重置」留在手势条上方。
+
+**技术选择**
+- 用 `setWindowLayoutFullScreen(true)` + 避让高度 padding，**不用 `expandSafeArea`**：标题栏（40vp）和表尾（行高）都是固定尺寸，`expandSafeArea` 只扩绘制不移动布局，固定尺寸组件上不生效，内容照样被系统栏压住；
+- 系统栏颜色与应用自己画的背景取同一个值（标题栏 `#2D8C42`、表尾 `#EAF3EC`），系统栏是实色也不会露出第二条色带，且不依赖透明色支持；
+- 避让高度用 `getWindowAvoidArea` 取（px），用 `avoidAreaChange` 跟转屏 / 折叠 / 分屏，写入 `AppStorage`，页面 `px2vp` 后当 padding；
+- 底部取 `max(TYPE_SYSTEM.bottomRect, TYPE_NAVIGATION_INDICATOR.bottomRect)`：三键导航是前者，手势条是后者。
+
+**改动文件**
+- 新增 `entry/src/main/ets/common/WindowChrome.ets`：`setupImmersive()` / `syncInsets()` / `applyHomeBars()` / `applyLightBars()` + 两个 AppStorage key + 颜色常量；
+- `entry/src/main/ets/entryability/EntryAbility.ets`：`loadContent` 前开沉浸式，系统栏颜色改为与页面一致；
+- `entry/src/main/ets/pages/Index.ets`：标题栏 `.height(40 + topInset)` + `padding top`；表格下方补一条「底部避让高度 × `#EAF3EC`」的装饰底（与表尾同色）；`applyHomeSystemBars()` 复用 `applyHomeBars()`；
+- `entry/src/main/ets/pages/WebPage.ets`：白底系统栏复用 `applyLightBars()`，返回时恢复 `applyHomeBars()`。
+
+**验收**
+- 手机竖屏 / 平板横竖屏 / 双折叠内外屏 / 分屏：顶部只有一条绿色，底部表尾颜色一直到屏幕底边，帮助 / 重置不被手势条压住；
+- 转屏、折叠、分屏后避让高度跟着变（`avoidAreaChange`）；
+- 键盘弹出（`RESIZE`）时表尾仍贴在键盘上方，收起后底部 padding 恢复；
+- 帮助网页返回后系统栏颜色恢复，不残留白条；
+- CLI 编译通过（`hvigorw assembleHap --mode module -p buildMode=debug`）。
+
+**风险 / 待真机确认**
+- 无真机/云调试时无法验证状态栏图标对比度，`statusBarContentColor` 取白色；
+- 三键导航的设备导航栏会刷成 `#EAF3EC`；若嫌突兀，把 `applyHomeBars()` 的 `navigationBarColor` 改回 `#FFFFFF` 即可，不影响内容避让；
+- 横屏挖孔的左右避让本次不做（手机锁竖屏、平板横屏通常无挖孔），留作后续。
+
+**实现结果（2026-11-04）**
+- 新增 `common/WindowChrome.ets`：`setupImmersive()` 开沉浸式并注册 `avoidAreaChange`，`syncInsets()` 把状态栏 / 底部避让（px）写进 `AppStorage`（`insetTopPx` / `insetBottomPx`）；
+- `Index` 标题栏 `.height(40 + 避让)` + `padding top`，背景 `title_bar_bg` 自己画到屏幕顶边，内容行仍是 40vp；
+- `Index` 表格下方加了一条 `height = 底部避让`、颜色 `#EAF3EC`（表尾同色）的装饰底，表尾背景连到屏幕底边，交互元素仍留在手势条上方；
+- 系统栏颜色收敛成 `applyHomeBars()` / `applyLightBars()` 两个函数，`EntryAbility` / `Index` / `WebPage` 不再各写一份 `#1F6B30`；
+- 顶部统一成标题栏绿 `#2D8C42`（原来是 `#1F6B30` 状态栏 + `#2D8C42` 标题栏两条色带）；
+- `hvigorw assembleHap --mode module -p product=default -p buildMode=debug --no-daemon` → **BUILD SUCCESSFUL**；
+- 未做 / 未验证：横屏挖孔左右避让；真机 / 云调试目视（本机 `hdc list targets` 为空，没有连接设备）。
 
 ## 平板验证的两条路（按性价比排序）
 

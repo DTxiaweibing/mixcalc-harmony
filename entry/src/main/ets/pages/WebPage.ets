@@ -2,6 +2,7 @@ import { router } from '@kit.ArkUI';
 import { webview } from '@kit.ArkWeb';
 import { window } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
+import { applyHomeBars, applyLightBars } from '../common/WindowChrome';
 
 @Entry
 @Component
@@ -42,12 +43,7 @@ struct WebPage {
 
   private applyLightSystemBars(): void {
     window.getLastWindow(getContext(this)).then((win) => {
-      win.setWindowSystemBarProperties({
-        statusBarColor: '#FFFFFF',
-        statusBarContentColor: '#000000',
-        navigationBarColor: '#FFFFFF',
-        navigationBarContentColor: '#000000'
-      });
+      applyLightBars(win);
     }).catch((err: Error) => {
       console.error('setWindowSystemBarProperties failed: ' + err.message);
     });
@@ -55,12 +51,7 @@ struct WebPage {
 
   private restoreSystemBars(): void {
     window.getLastWindow(getContext(this)).then((win) => {
-      win.setWindowSystemBarProperties({
-        statusBarColor: '#1F6B30',
-        statusBarContentColor: '#FFFFFF',
-        navigationBarColor: '#FFFFFF',
-        navigationBarContentColor: '#000000'
-      });
+      applyHomeBars(win);
     }).catch((err: Error) => {
       console.error('restoreSystemBarProperties failed: ' + err.message);
     });

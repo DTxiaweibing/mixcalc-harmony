@@ -3,6 +3,14 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循语义化版本。
 本文件从 0.3.5 起记录，更早版本见 Git 提交历史。
 
+## [未发布]
+
+### 优化
+
+- **边到边（沉浸式）**：窗口改为铺满整屏，标题栏背景一直画到状态栏、表尾背景一直画到导航条，“标题 / 表格 / 帮助·重置”仍留在安全区内；避让高度由 `getWindowAvoidArea` + `avoidAreaChange` 实时取，转屏 / 折叠 / 分屏都跟着变。
+- 顶部状态栏与标题栏统一为 `#2D8C42`（原先是 `#1F6B30` 状态栏 + `#2D8C42` 标题栏两条色带）。
+- 系统栏颜色收敛到 `common/WindowChrome.ets` 的 `applyHomeBars()` / `applyLightBars()`，`EntryAbility` / `Index` / `WebPage` 不再各写一份色号。
+
 ## [0.3.5] - 2026-11-02（对齐安卓 0.3.5）
 
 ### 修复

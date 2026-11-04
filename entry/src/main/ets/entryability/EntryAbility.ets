@@ -1,6 +1,7 @@
 import { UIAbility, AbilityConstant, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
+import { applyHomeBars, setupImmersive } from '../common/WindowChrome';
 
 export default class EntryAbility extends UIAbility {
   private maximizeStarted: boolean = false;
@@ -37,14 +38,11 @@ export default class EntryAbility extends UIAbility {
     ).catch((e: BusinessError) => {
       console.error('setPreferredOrientation failed: ' + e.code);
     });
-    win.setWindowSystemBarProperties({
-      statusBarColor: '#1F6B30',
-      statusBarContentColor: '#FFFFFF',
-      navigationBarColor: '#FFFFFF',
-      navigationBarContentColor: '#000000'
-    }).catch((e: BusinessError) => {
-      console.error('setWindowSystemBarProperties failed: ' + e.code);
-    });
+    applyHomeBars(win);
+    // 边到边：窗口铺满整屏（含状态栏 / 导航条区域），标题栏和表尾自己把背景画进去，
+    // 内容靠 WindowChrome 写进 AppStorage 的避让高度留出安全距离。
+    // 和方向一样必须在 loadContent 之前设，否则第一帧还是旧的安全区布局。
+    setupImmersive(win);
     // supportWindowMode 里加了 split 后，系统可能恢复上次的分屏状态。
     // 平板启动时主动最大化一次，保证默认全屏；用户仍可在使用中手动分屏。
     // FOLLOW_APP_IMMERSIVE_SETTING：保留应用自己设置的状态栏/导航栏，不强制沉浸。
