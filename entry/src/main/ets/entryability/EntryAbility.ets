@@ -1,7 +1,7 @@
 import { UIAbility, AbilityConstant, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
-import { applyHomeBars, setupImmersive } from '../common/WindowChrome';
+import { applyHomeBars, setupImmersive, syncWindowMode } from '../common/WindowChrome';
 
 export default class EntryAbility extends UIAbility {
   private maximizeStarted: boolean = false;
@@ -19,6 +19,8 @@ export default class EntryAbility extends UIAbility {
       }
       // 兜底：个别机型 loadContent 之前拿不到主窗口，这里再设一次（幂等）
       this.applyWindowSetup(windowStage);
+      // 窗口已建好：系统可能直接恢复上次的分屏 / 悬浮窗状态，按真实模式决定系统栏归谁
+      this.refreshWindowMode(windowStage);
     });
   }
 
@@ -49,10 +51,22 @@ export default class EntryAbility extends UIAbility {
     if (!isPhone && !this.maximizeStarted) {
       this.maximizeStarted = true;
       win.maximize(window.MaximizePresentation.FOLLOW_APP_IMMERSIVE_SETTING)
+        .then(() => {
+          // 最大化后窗口模式才稳定（自由多窗下是 MAXIMIZE），再读一次
+          syncWindowMode(win);
+        })
         .catch((e: BusinessError) => {
           this.maximizeStarted = false;
           console.error('maximize failed: ' + e.code);
         });
+    }
+  }
+
+  private refreshWindowMode(windowStage: window.WindowStage): void {
+    try {
+      syncWindowMode(windowStage.getMainWindowSync());
+    } catch (e) {
+      console.error('getMainWindowSync failed: ' + e);
     }
   }
 }

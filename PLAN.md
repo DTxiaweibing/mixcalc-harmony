@@ -106,6 +106,7 @@ _最近更新：2026-11-04_
       · 注意：hvigor 直接签名要 DevEco 加密密码，明文会报 `00303116`；所以走 unsigned APP + `hap-sign-tool`
 7. [x] P4 边到边真机目视（2026-11-04 nova 15）：顶部单色绿、表尾到屏幕底边、键盘上方无空隙、帮助 / 隐私 / 协议三页避让状态栏
 8. [ ] P4 边到边平板 / 折叠屏 / 分屏 / 手势导航条复验（见「P4」验收）
+      · 2026-11-05 手机侧已补：分屏 / 悬浮窗状态栏交还系统（手滑过程中无绿边残留）、顶部两条色带、底部单元格灰
 
 ## 下一步工作计划（2026-10-31，P0/P1 已于 2026-11-01 实现）
 
@@ -424,6 +425,75 @@ mode = preferSystem ? SYSTEM
 - 网页页实测布局（`uitest dumpLayout`）：`Web` 节点 = `[0,108][1084,2322]`，即状态栏 108px 之下、导航栏 90px 之上，`padding` 生效；隐私政策 / 用户协议 / 使用帮助三页截图目视确认，首行不再压状态栏；
 - 网页页返回首页后系统栏恢复绿色（`Index.onPageShow()` → `applyHomeBars()`）；
 - 未验证：平板横竖屏、双折叠内外屏、分屏、手势导航条设备；横屏挖孔左右避让本次不做。
+
+**P4.1 分屏 / 悬浮窗：窗口顶部交还系统（2026-11-04）**
+
+**现象**
+- 手机上从底部上滑进入分屏 / 悬浮窗后，屏幕顶部状态栏是系统画的（透出桌面壁纸色），
+  但应用窗口自己顶部还留了一条状态栏高度的绿色边，压在系统「三点控制栏」下面。
+- 原因：窗口此时不是铺满整屏，`TYPE_SYSTEM.topRect` 报的是系统三点控制栏的高度，
+  我们把它当成状态栏高度加进了标题栏 `padding`，等于在窗口里多画一条应用色。
+- 第二轮真机：改为按窗口模式退出沉浸式后，底部导航栏立刻还回去了，但顶部状态栏
+  **在手势上滑的整个过程中仍然是绿的**，松手、`windowStatusChange` 到达后才变回壁纸。
+
+**结论（已确认的事实）**
+- 分屏 / 悬浮窗下状态栏由系统绘制，应用无法着色：微信读书、小艺小窗同样如此；
+  安卓的自由窗口会用焦点窗口的 `statusBarColor`，所以那边是绿的，这是平台差异不是 bug；
+- 所以这里不该「继续画绿」，而应按窗口模式主动退出沉浸式：不再给系统栏上色、
+  不再留状态栏 / 导航条避让高度，窗口顶部交还系统（壁纸色）。
+
+**方案**
+- `WindowChrome` 记住窗口模式（`getWindowStatus()`）并监听 `windowStatusChange`（另有 `windowSizeChange` 兜底）：
+  - `SPLIT_SCREEN` / `FLOATING`：`setWindowLayoutFullScreen(false)`，`insetTopPx` / `insetBottomPx` 写 0
+    （窗口顶部不再留状态栏高度的 padding）；
+  - `FULL_SCREEN`：重新开沉浸式，避让高度由 `avoidAreaChange` 刷新。
+- 系统栏颜色**一律透明**（`statusBarColor` / `navigationBarColor` = `#00000000`），
+  绿色 / 白色由标题栏、表尾、网页白底自己画在系统栏下面：
+  - 只"按模式重置"还不够：之前设的实色会一直跟着窗口，上滑进小窗的过程中状态栏一直是绿的，
+    要等手势结束、`windowStatusChange` 到达才变回壁纸（真机 nova 15 实测，用户指出「还晚了」）；
+  - 透明之后每一帧都由窗口自己的内容决定，窗口一离开状态栏区域，状态栏立刻透出壁纸，
+    和手势动画同步，不依赖回调时机；
+  - 分屏 / 悬浮窗下图标色换成系统默认白色。
+- 顶部恢复安卓的两条色带：状态栏区域 `#1F6B30` + 标题栏 `#2D8C42`。
+  深绿那条由 `Index` 顶部单独一个 `Column` 画（高度 = 状态栏避让高度，分屏 / 悬浮窗下为 0），
+  仍然不是推给系统的颜色，所以手势过程中照样立刻透出壁纸。
+- 底部导航条区域颜色改成单元格灰 `#F0F0F0`（原来是表尾浅绿 `#EAF3EC`）：
+  和表格里的灰格连成一片，底部不再多出一条绿带。
+- 页面不改：`Index` / `WebPage` 仍只读 `AppStorage` 里的避让高度，模式一变高度自然归零。
+- 暂不改 `MAXIMIZE`：PC / 2in1 / 平板自由多窗的「最大化」窗口仍铺满整屏，系统栏位置与全屏一致，
+  继续沉浸式不会多出色带；等平板真机复验再定。
+- 启动不做模式预判：`getWindowStatus()` 在窗口建好前可能是 `UNDEFINED`，会把全屏误判成分屏。
+  `setupImmersive()` 先按全屏开沉浸式，`loadContent` 回调与 `maximize()` 完成后再读一次状态。
+
+**改动文件**
+- `entry/src/main/ets/common/WindowChrome.ets`：新增 `syncWindowMode()` / `applyWindowMode()` /
+  `paintBars()`，`setupImmersive()` 注册 `windowStatusChange`（`windowSizeChange` 兜底），
+  `syncInsets()` 非全屏时归零；`TITLE_BAR_COLOR` 改为状态栏专用 `STATUS_BAR_COLOR = #1F6B30`；
+- `entry/src/main/ets/entryability/EntryAbility.ets`：`loadContent` 回调与 `maximize()` 之后各调一次
+  `syncWindowMode()`；
+- `entry/src/main/ets/pages/Index.ets`：标题栏拆成「深绿状态栏条 + 40vp 绿标题栏」两段，
+  原来靠 `height(40 + 避让) + padding` 的写法去掉。
+
+**验收**
+- 全屏：与 P4 一致（顶部单色绿、表尾到屏幕底边、键盘上方无空隙）；
+- 上滑进入分屏 / 悬浮窗：窗口顶部不再有状态栏高度的绿色边，状态栏是系统壁纸色 / 三点控制栏；
+- 回到全屏：绿色状态栏与标题栏重新接上，无残留白条 / 空条；
+- 分屏 / 悬浮窗下打开帮助网页：网页整窗铺满，不因旧的避让高度留白。
+
+**实现结果（2026-11-05）**
+- `common/WindowChrome.ets`：新增 `applyWindowMode()` / `syncWindowMode()` / `paintBars()`；
+  `setupImmersive()` 注册 `windowStatusChange`，并用 `windowSizeChange` 兜底；`syncInsets()` 非全屏时归零；
+  系统栏颜色恒为 `#00000000`；`TITLE_BAR_COLOR` 换成状态栏专用 `STATUS_BAR_COLOR = '#1F6B30'`，
+  `TABLE_BOTTOM_COLOR` 改为单元格灰 `#F0F0F0`；
+- `entryability/EntryAbility.ets`：`loadContent` 回调与 `maximize()` 之后各读一次窗口模式；
+- `pages/Index.ets`：标题栏拆成「深绿状态栏条（高度 = 避让）+ 40vp 绿标题栏」；
+- `hvigorw assembleHap --mode module -p product=default -p buildMode=debug --no-daemon` → **BUILD SUCCESSFUL**。
+
+**真机验证（2026-11-05，nova 15 / 1084×2412 / 三键导航）**
+- 全屏：`y=0~108` = `#206B30`（JPEG 噪声下的 `#1F6B30`），`y=108~215` = `#2E8C42`（≈`#2D8C42`），两条色带与安卓一致；
+- 底部导航条区域 = `#F0F0F0`，与表格灰格同色，不再多出绿带；
+- 上滑进分屏 / 悬浮窗：状态栏当帧透出壁纸，手势过程中无绿色残留（用户目视确认）；
+- 未验证：平板 / 折叠屏 / 手势导航条设备。
 
 ## 平板验证的两条路（按性价比排序）
 

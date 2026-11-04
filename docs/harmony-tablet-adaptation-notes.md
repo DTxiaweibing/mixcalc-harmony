@@ -312,7 +312,7 @@ dist/mixcalc-<version>-release-signed.hap
 
 ### 11.2 三条硬规则
 
-1. **系统栏颜色必须和应用自己画的背景同色**（`statusBarColor` = 标题栏色、`navigationBarColor` = 表尾色）。否则背景铺上去了，系统栏还是另一条色，看着还是两截。
+1. **系统栏颜色一律透明（`#00000000`），颜色由页面自己画在系统栏下面**。别把实色推给系统——平板全屏时看着一样，一旦拖进分屏 / 小窗就会「还晚了」（见 11.4）。
 2. **避让高度用 `getWindowAvoidArea` 取，并且必须监听 `avoidAreaChange`**。转屏、折叠展开、分屏、切三键/手势导航都会变；只在启动时取一次，用户一折叠就错位。
 3. **底部取 `max(TYPE_SYSTEM.bottomRect, TYPE_NAVIGATION_INDICATOR.bottomRect)`**：三键导航塞在 `TYPE_SYSTEM` 里，手势条才是 `TYPE_NAVIGATION_INDICATOR`，两个都读才不漏。
 
@@ -325,3 +325,31 @@ dist/mixcalc-<version>-release-signed.hap
 - **网页页（帮助 / 隐私 / 协议）要单独做避让**：`Web` 组件自己不会让状态栏，根 `Column` 必须加 `padding({ top: 状态栏, bottom: 导航条 })`；实测 `Web` 节点边界 = `[0,108][1084,2322]`（108px 状态栏 / 90px 导航栏）才对。
 - **键盘弹起时底部装饰条要收掉**：`RESIZE` 已经把窗口压到键盘上方，导航条这时压在键盘上，如果还按底部避让留一条垫底，表尾和键盘之间就会多出 20 多 vp 空白；用 `kbVisible ? 0 : 避让高度`。
 - 沉浸式之后**横屏挖孔**的左右避让要想清楚做不做；当前手机锁竖屏、平板横屏通常无孔，所以没做。
+
+### 11.4 分屏 / 悬浮窗：状态栏必须「当帧」交还系统
+
+**现象**：手机从底部上滑进分屏 / 小窗，整个手势过程中顶部状态栏一直是应用的绿，松手、窗口定稿后才变回壁纸。
+
+**原因有两层**
+
+1. `windowStatusChange` 在**手势结束、窗口形态定稿之后**才派发。指望它来改颜色，就一定比动画晚；
+2. 更关键的是：只要 `statusBarColor` 推过实色，系统栏就一直按那个颜色画，跟窗口动画无关。
+
+**结论：不要给系统栏推实色。**
+
+`statusBarColor` / `navigationBarColor` 恒为 `#00000000`，绿 / 白由页面自己画在系统栏位置。窗口一缩小，那块内容跟着窗口走，状态栏**当帧**就透出壁纸——和手势动画同步，不依赖任何回调时机。
+
+**实现要点（`common/WindowChrome.ets`）**
+
+- `applyWindowMode()` 按 `getWindowStatus()` 切换：`SPLIT_SCREEN` / `FLOATING` → `setWindowLayoutFullScreen(false)` + 避让高度写 0；`FULL_SCREEN` → 恢复；
+- 进小窗时 `TYPE_SYSTEM.topRect` 报的是系统「三点控制栏」高度，照旧当状态栏加 padding，会在窗口里多画一条色带，所以非全屏时两个避让高度**一律 0**；
+- 除 `windowStatusChange` 外再挂 `windowSizeChange` 兜底（个别版本进小窗只发尺寸事件）；
+- 启动**不要**预判模式：窗口建好前 `getWindowStatus()` 可能是 `UNDEFINED`，会把全屏误判成分屏；等 `loadContent` 回调 / `maximize()` 之后各读一次；
+- 分屏 / 小窗下图标色换回系统默认白色；
+- `MAXIMIZE`（PC / 2in1 / 平板自由多窗最大化）暂按全屏处理，待平板复验。
+
+### 11.5 顶部 / 底部配色（与安卓对齐）
+
+- 顶部两条色带：状态栏区域 `#1F6B30` + 标题栏 `#2D8C42`。深绿那条是 `Index` 顶部一个 `Column`（高度 = 状态栏避让高度），**不是**系统栏颜色，所以它天然跟着窗口走；
+- 底部：屏幕最底部铺 `#F0F0F0`（与表格灰格同色），不是表尾的 `#EAF3EC`——否则底部会多出一条绿带；
+- 网页页（帮助 / 隐私 / 协议）：白底 + 黑图标，靠 `WebPage` 根 `Column` 的白底兜住透明状态栏。

@@ -7,7 +7,7 @@ import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
 import { t } from '../common/Strings';
 import { LAYOUT_COLUMN_IDS, fillsAllColumns, isTabletWidth } from '../common/LayoutRules';
-import { applyHomeBars, TABLE_BOTTOM_COLOR, toVp } from '../common/WindowChrome';
+import { applyHomeBars, STATUS_BAR_COLOR, TABLE_BOTTOM_COLOR, toVp } from '../common/WindowChrome';
 import { i18n } from '@kit.LocalizationKit';
 import { util } from '@kit.ArkTS';
 
@@ -621,6 +621,14 @@ struct Index {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
+        // 边到边：状态栏区域单独一条深绿（安卓同款 #1F6B30），标题栏仍是 #2D8C42。
+        // 系统状态栏本身透明，这块是我们自己画的：上滑进小窗时它跟着窗口一起缩，
+        // 状态栏立刻透出壁纸，不会有颜色残留在系统栏上。
+        Column()
+          .width('100%')
+          .height(this.insetVp(this.insetTopPx))
+          .backgroundColor(STATUS_BAR_COLOR)
+
         Row() {
           // 与安卓一致：左侧 20% 容器、paddingStart 8dp、图标 26×26 靠左、垂直居中
           // 点击热区给整个 20% 容器（图标只有 26dp，太小不好按）
@@ -660,9 +668,8 @@ struct Index {
             .textAlign(TextAlign.Center)
         }
         .width('100%')
-        // 边到边：高度补上状态栏避让高度，背景铺到屏幕顶边；内容行仍是 40vp
-        .height(40 + this.insetVp(this.insetTopPx))
-        .padding({ top: this.insetVp(this.insetTopPx) })
+        // 内容行固定 40vp：状态栏那块由上面单独的深绿条负责
+        .height(40)
         .backgroundColor($r('app.color.title_bar_bg'))
 
         ForEach([this.tableGen], (gen: number) => {
@@ -699,7 +706,8 @@ struct Index {
             .width('100%')
           }, (gen: number) => 'tbl' + gen.toString())
 
-        // 边到边：表尾背景延伸到导航条 / 手势条区域。
+        // 边到边：屏幕最底部铺到导航条 / 手势条区域，颜色取单元格灰（`#F0F0F0`），
+        // 和表格里的灰格连成一片，底部不会多出一条绿带。
         // 这块只是屏幕底部的底色，不参与任何交互；避让高度为 0 时高度也是 0，不占位。
         // 键盘弹起时窗口已经 RESIZE 到键盘上方，导航条压在键盘上，这块必须收掉，
         // 否则表尾和键盘之间会多一条空白。
