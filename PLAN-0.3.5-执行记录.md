@@ -255,7 +255,14 @@ hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no
 - 真机 `bm dump` 已确认安装包 `supportWindowMode` 为 `[0, 1]`（fullscreen + split）；
 - 已重新安装 debug HAP，release 包同步重打。
 
-### 最终打包（2026-11-02 21:37）
+### 菜单宽度（2026-11-02 21:50）
+
+- 手机 / 未铺满 11 列：菜单宽度 `max(140, 窗口宽 / 3)`；
+- 平板 / 已铺满 11 列：菜单宽度 `max(140, 窗口宽 / 4)`；
+- 鸿蒙用 `isQuickSettingsVisible()`（11 列全显）或 `isTabletWidth()` 判断；
+- 安卓用 `isTabletMode || isElevenColumnsFilled()` 判断，双折叠内屏也按 1/4。
+
+### 最终打包（2026-11-02 22:01）
 
 **调试包**
 

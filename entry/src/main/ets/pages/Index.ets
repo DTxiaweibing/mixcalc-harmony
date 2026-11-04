@@ -6,7 +6,7 @@ import { Batch } from '../model/Batch';
 import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
 import { t } from '../common/Strings';
-import { LAYOUT_COLUMN_IDS, fillsAllColumns } from '../common/LayoutRules';
+import { LAYOUT_COLUMN_IDS, fillsAllColumns, isTabletWidth } from '../common/LayoutRules';
 import { i18n } from '@kit.LocalizationKit';
 import { util } from '@kit.ArkTS';
 
@@ -71,7 +71,12 @@ struct Index {
   // 菜单宽度永远按当前窗口宽度实时算，不做缓存：
   // 转屏 / 折叠 / 分屏之后不会留着旧方向的值（旧实现缓存到 @State，事件一丢就永久错）。
   private menuWidth(): number {
-    return Math.max(140, this.screenW / 3);
+    const width: number = Math.max(1, this.screenW);
+    // 平板 / 11 列全显：1/4；手机或未铺满 11 列：1/3。
+    // 双折叠等“手机设备但已经是 11 列”的情况，也要按 1/4。
+    const eleven: boolean = this.batches.length > 0 && !this.isQuickSettingsVisible();
+    const quarter: boolean = eleven || isTabletWidth(width);
+    return Math.max(140, width * (quarter ? 0.25 : 1 / 3));
   }
 
   // 表格已经铺满 11 列时不再提供「快捷设置」（与安卓 0.3.5 的 isElevenColumnsFilled 一致）：
