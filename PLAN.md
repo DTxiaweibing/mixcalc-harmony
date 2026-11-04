@@ -104,7 +104,8 @@ _最近更新：2026-11-04_
       · APP 打包脚本：`scripts/build-release-app.ps1`（CLI，打 unsigned APP + hap-sign-tool 手签，产出 `dist/*.app`）
       · 2026-10-30 已跑通：`dist/mixcalc-0.3.4-release-signed.app`（待 AGC 上传验证内层 HAP 签名）
       · 注意：hvigor 直接签名要 DevEco 加密密码，明文会报 `00303116`；所以走 unsigned APP + `hap-sign-tool`
-7. [ ] P4 边到边真机 / 云调试目视：顶部只有一条绿、底部表尾到屏幕底边、「帮助 / 重置」不被手势条压住（见「P4」验收）
+7. [x] P4 边到边真机目视（2026-11-04 nova 15）：顶部单色绿、表尾到屏幕底边、键盘上方无空隙、帮助 / 隐私 / 协议三页避让状态栏
+8. [ ] P4 边到边平板 / 折叠屏 / 分屏 / 手势导航条复验（见「P4」验收）
 
 ## 下一步工作计划（2026-10-31，P0/P1 已于 2026-11-01 实现）
 
@@ -370,7 +371,7 @@ mode = preferSystem ? SYSTEM
 
 ### P4 边到边（沉浸式）适配（2026-11-04）
 
-**状态：已实现，CLI 编译通过（2026-11-04）；待真机 / 云调试目视确认**
+**状态：已实现并在真机（nova 15，无线调试）逐页确认（2026-11-04）；平板 / 折叠屏待验**
 
 **现状（对照边到边设计文档逐条核对）**
 - `EntryAbility` 只调 `setWindowSystemBarProperties`（状态栏 `#1F6B30`、导航栏 `#FFFFFF`）；全仓库没有 `setWindowLayoutFullScreen` / `expandSafeArea` / `getWindowAvoidArea` / `avoidAreaChange`；
@@ -392,7 +393,7 @@ mode = preferSystem ? SYSTEM
 - 新增 `entry/src/main/ets/common/WindowChrome.ets`：`setupImmersive()` / `syncInsets()` / `applyHomeBars()` / `applyLightBars()` + 两个 AppStorage key + 颜色常量；
 - `entry/src/main/ets/entryability/EntryAbility.ets`：`loadContent` 前开沉浸式，系统栏颜色改为与页面一致；
 - `entry/src/main/ets/pages/Index.ets`：标题栏 `.height(40 + topInset)` + `padding top`；表格下方补一条「底部避让高度 × `#EAF3EC`」的装饰底（与表尾同色）；`applyHomeSystemBars()` 复用 `applyHomeBars()`；
-- `entry/src/main/ets/pages/WebPage.ets`：白底系统栏复用 `applyLightBars()`，返回时恢复 `applyHomeBars()`。
+- `entry/src/main/ets/pages/WebPage.ets`：根 `Column` 按避让高度加 `padding`（白底），网页内容不钻进状态栏 / 导航条；白底系统栏复用 `applyLightBars()`，返回时恢复 `applyHomeBars()`。
 
 **验收**
 - 手机竖屏 / 平板横竖屏 / 双折叠内外屏 / 分屏：顶部只有一条绿色，底部表尾颜色一直到屏幕底边，帮助 / 重置不被手势条压住；
@@ -412,8 +413,17 @@ mode = preferSystem ? SYSTEM
 - `Index` 表格下方加了一条 `height = 底部避让`、颜色 `#EAF3EC`（表尾同色）的装饰底，表尾背景连到屏幕底边，交互元素仍留在手势条上方；
 - 系统栏颜色收敛成 `applyHomeBars()` / `applyLightBars()` 两个函数，`EntryAbility` / `Index` / `WebPage` 不再各写一份 `#1F6B30`；
 - 顶部统一成标题栏绿 `#2D8C42`（原来是 `#1F6B30` 状态栏 + `#2D8C42` 标题栏两条色带）；
-- `hvigorw assembleHap --mode module -p product=default -p buildMode=debug --no-daemon` → **BUILD SUCCESSFUL**；
-- 未做 / 未验证：横屏挖孔左右避让；真机 / 云调试目视（本机 `hdc list targets` 为空，没有连接设备）。
+- 键盘弹起（`RESIZE` 已把窗口压到键盘上方、导航条压在键盘上）时，底部装饰条高度强制为 `0`，否则表尾和键盘之间多一条约 27vp 空白；
+- `WebPage` 根 `Column` 加 `padding({ top: 避让, bottom: 避让 })` + 白底：帮助 / 隐私政策 / 用户协议此前没做沉浸式避让，网页第一行会被状态栏压住；
+- `toVp(ctx, px)` 收进 `WindowChrome`，`Index` / `WebPage` 共用一份 px→vp 换算；
+- `hvigorw assembleHap --mode module -p product=default -p buildMode=debug --no-daemon` → **BUILD SUCCESSFUL**。
+
+**真机验证（2026-11-04，nova 15 / 1084×2412 / 三键导航 / `hdc tconn 192.168.10.103:42085`）**
+- 首页：`y=0~约 300px` 全为 `#2E8C42`（JPEG 噪声下的 `#2D8C42`），状态栏与标题栏同色、无第二条色带；底部 `y≈2240~2412` 全为 `#E9F3EB`（≈`#EAF3EC`），表尾背景连到屏幕底边；
+- 键盘弹起：表尾紧贴键盘上沿，无空隙（修复前约 27vp 空白）；
+- 网页页实测布局（`uitest dumpLayout`）：`Web` 节点 = `[0,108][1084,2322]`，即状态栏 108px 之下、导航栏 90px 之上，`padding` 生效；隐私政策 / 用户协议 / 使用帮助三页截图目视确认，首行不再压状态栏；
+- 网页页返回首页后系统栏恢复绿色（`Index.onPageShow()` → `applyHomeBars()`）；
+- 未验证：平板横竖屏、双折叠内外屏、分屏、手势导航条设备；横屏挖孔左右避让本次不做。
 
 ## 平板验证的两条路（按性价比排序）
 

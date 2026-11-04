@@ -6,7 +6,7 @@
 // 标题栏（40vp）和表尾（行高）都是固定尺寸，expandSafeArea 只扩展绘制区域、
 // 不移动布局内容，固定尺寸组件上等于没效果，内容照样会被系统栏压住。
 
-import { window } from '@kit.ArkUI';
+import { window, UIContext } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 
 // 与 resources/base/element/color.json 的 title_bar_bg 同色：
@@ -20,6 +20,11 @@ export const INSET_TOP_KEY: string = 'insetTopPx';
 export const INSET_BOTTOM_KEY: string = 'insetBottomPx';
 
 let avoidBound: boolean = false;
+
+// 避让高度以 px 存储，布局统一换成 vp；两个页面共用，避免各写一份换算
+export function toVp(ctx: UIContext, px: number): number {
+  return px > 0 ? ctx.px2vp(px) : 0;
+}
 
 function avoidHeight(win: window.Window, type: window.AvoidAreaType, top: boolean): number {
   try {

@@ -322,4 +322,6 @@ dist/mixcalc-<version>-release-signed.hap
 - `height(40 + inset)` + `padding({top: inset})` 才等价于「内容行 40vp + 背景垫到顶」；只加 padding 不补 height，ArkUI 的 padding 在尺寸内，内容会被压扁。
 - `avoidAreaChange` 在 `loadContent` 之前拿不到准值，要在 `loadContent` 回调里再 `syncInsets()` 一次兜底。
 - 系统栏颜色别在三个页面各写一份（现在是 `WindowChrome.ets` 一份），否则改色必漏。
+- **网页页（帮助 / 隐私 / 协议）要单独做避让**：`Web` 组件自己不会让状态栏，根 `Column` 必须加 `padding({ top: 状态栏, bottom: 导航条 })`；实测 `Web` 节点边界 = `[0,108][1084,2322]`（108px 状态栏 / 90px 导航栏）才对。
+- **键盘弹起时底部装饰条要收掉**：`RESIZE` 已经把窗口压到键盘上方，导航条这时压在键盘上，如果还按底部避让留一条垫底，表尾和键盘之间就会多出 20 多 vp 空白；用 `kbVisible ? 0 : 避让高度`。
 - 沉浸式之后**横屏挖孔**的左右避让要想清楚做不做；当前手机锁竖屏、平板横屏通常无孔，所以没做。

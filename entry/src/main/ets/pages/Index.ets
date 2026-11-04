@@ -7,7 +7,7 @@ import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
 import { t } from '../common/Strings';
 import { LAYOUT_COLUMN_IDS, fillsAllColumns, isTabletWidth } from '../common/LayoutRules';
-import { applyHomeBars, TABLE_BOTTOM_COLOR } from '../common/WindowChrome';
+import { applyHomeBars, TABLE_BOTTOM_COLOR, toVp } from '../common/WindowChrome';
 import { i18n } from '@kit.LocalizationKit';
 import { util } from '@kit.ArkTS';
 
@@ -135,7 +135,7 @@ struct Index {
 
   // 避让高度以 px 存在 AppStorage 里，布局统一换成 vp
   private insetVp(px: number): number {
-    return px > 0 ? this.getUIContext().px2vp(px) : 0;
+    return toVp(this.getUIContext(), px);
   }
 
   async aboutToAppear(): Promise<void> {
@@ -701,9 +701,11 @@ struct Index {
 
         // 边到边：表尾背景延伸到导航条 / 手势条区域。
         // 这块只是屏幕底部的底色，不参与任何交互；避让高度为 0 时高度也是 0，不占位。
+        // 键盘弹起时窗口已经 RESIZE 到键盘上方，导航条压在键盘上，这块必须收掉，
+        // 否则表尾和键盘之间会多一条空白。
         Column()
           .width('100%')
-          .height(this.insetVp(this.insetBottomPx))
+          .height(this.kbVisible ? 0 : this.insetVp(this.insetBottomPx))
           .backgroundColor(TABLE_BOTTOM_COLOR)
       }
       .width('100%')
