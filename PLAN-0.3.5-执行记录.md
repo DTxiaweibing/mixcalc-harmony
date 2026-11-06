@@ -284,3 +284,30 @@ hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no
 - 应用市场 → release 签名 APP；
 - 普通手机直接点 release HAP 仍会报 `9568322 not trusted app source`，这是手机不信任本机 release 证书，不是包坏了；云调试/上架走对应渠道即可。
 
+### 棚号打点覆盖 + 棚数只读 + 上限 1000（2026-11-07）
+
+**改了什么**
+
+- 新增 `entry/src/main/ets/model/ShedCoverage.ets`：棚号解析（`1-40` / `1到40` / `1至40` / `1~40` / 反向 `40-1` / 逗号顿号空格分段 / `1 - 40` 横杠带空格 / 行内重复去重）+ 打点覆盖（按行序铺开，后行优先）。
+- `FeedData` 棚数改为「本行棚号去重后的个数」；删掉手改棚数相关字段和持久化键（`shedCountBase` / `shedCountBaseSum` / `isShedCountManuallyModified` / `defaultShedCount`），旧存档多余键读取时自动忽略。
+- `MixCalcTable`：重算时先铺地皮、再算首行余数（首行棚数 = 总棚数 − 下面各行去重后分走的棚数）；「棚数」列只读（`isEditableColumn` 排除第 2 列，键盘「下一格」自动跳过）；棚数被覆盖成 0 的行不参与料/水合计；首行超额仍黄底红框。
+- `Index.computeError` 合计口径同步，跳过棚数 0 的行。
+- 棚号上限 1000：超过 1000 的段整段不计入（不截断）；`findOverLimit` 负责弹 toast「输入超上限值：棚号最大 1000」，同一次编辑只提示一次；超限时不清空该行已填料量，改回合法值后自动接着算。
+- 帮助页（中/英）补三条：重叠后行优先、棚数自动算不可手填、棚号最大 1000。
+
+**行为示例**
+
+- 首行 `1-40`、第二行 `20-30`、第三行 `25-35` → 第三行 11、第二行 5、第一行 24，合计 40；旧逻辑会把重叠的 16 个算两遍。
+
+**验证**
+
+- 算法：用 Node 直接加载 `ShedCoverage.ets` / `FeedData.ets` 跑了 23 条用例（解析、反向、行内去重、覆盖、首行余数、上限 1000 / 超限识别），全部通过。
+- 编译：`hvigorw assembleHap -p product=default -p buildMode=debug --no-daemon` → BUILD SUCCESSFUL，`SignHap` 成功。
+- 真机：`hdc tconn 192.168.10.103:42085` → `hdc install -r` 安装成功 → `aa start` 启动正常；截图确认多行同填「1」时只有最后一行计 1、首行降到 0 并亮黄，符合后行优先。
+- 包：`dist/mixcalc-0.3.5-debug-signed.hap`（debug 自动签名；release 包未重打，上架前再出）。
+
+**遗留 / 注意**
+
+- 测试走的是 debug 自动签名，不是 `D:\mixcalc-sign` 的 release 证书；release HAP 普通手机仍会报 `9568322`，属预期。
+- 棚号上限在代码里是 `MAX_SHED_NUMBER`，帮助页 html 里写的是同一个数值；以后改上限要两边一起改。
+

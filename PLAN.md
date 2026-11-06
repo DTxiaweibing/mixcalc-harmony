@@ -5,7 +5,7 @@
 >
 > 维护规则：**每完成一部分就回到这个文件更新一次**（已完成 / 待办 / 待验证三块）。
 
-_最近更新：2026-11-04_
+_最近更新：2026-11-07_
 
 > 经验沉淀：**鸿蒙输入框 / 键盘 / 焦点**的坑与最终方案见 [docs/harmony-input-keyboard-notes.md](docs/harmony-input-keyboard-notes.md)；**平板适配 / 全屏 / 键盘 / 上架包**见 [docs/harmony-tablet-adaptation-notes.md](docs/harmony-tablet-adaptation-notes.md)（新项目或换人接手先读一遍）。
 > **0.3.5 对齐安卓的改动与验证记录**见 [PLAN-0.3.5-执行记录.md](PLAN-0.3.5-执行记录.md)。
@@ -28,7 +28,9 @@ _最近更新：2026-11-04_
 - [x] 键盘「下一步」= 同向右移（行末换行）；右下角「下一行 ▾」= 同列向下
 - [x] 顺序录入规则：点格子 / 键盘下一步（跨行）/ 下一行按钮，前面有空行时拦截并弹窗提示
 - [x] 「只拦空行」：中间行被清空后，后面已有数据的行照样能改
-- [x] 棚号↔棚数联动：改棚号时清掉「棚数手改」标记，以最后一次修改为准
+- [x] 棚号打点覆盖：后行优先去重（重叠棚号只归最后一行），棚数由棚号自动算出；同一行里重复写的棚号也只算一次
+- [x] 棚号上限 1000：超过弹「输入超上限值：棚号最大 1000」且整段不计入；同一次编辑只提示一次，超限时不清空该行已填料量
+- [x] 「棚数」列只读：不能点开输入，键盘「下一格」自动跳过；首行棚数 = 总棚数 − 下面各行去重后分走的棚数，超额时黄底红框
 - [x] 棚号输入白名单：只放行 0-9 / - / 到 至 ~ — 、 ， , 空格 号（字母/汉字/表情打不进去），解析归一化同安卓（1到40、1号至40号、1、2、3）
 - [x] 长按料格换料比例（10%~90%、当前值 ✓、浅绿高亮；改过数值即失效）
 - [x] 列操作（长按表头：固定/隐藏/显示全部/取消固定，按批持久化）
@@ -39,7 +41,7 @@ _最近更新：2026-11-04_
 - [x] 列宽自适应：隐藏列后可见列按比例铺满屏宽（手机 / 平板都生效），不再出现右侧留白
 - [x] 「下一行 ▾」只在键盘弹起时显示，键盘收起即隐藏（`window.on('keyboardHeightChange')`）
 - [x] 第一行「棚号」第一次点开弹格式提示（最小-最大，如 1-40），带「查看帮助」，只提示一次
-- [x] 第一行「棚数」在棚号为空时拦截，提示「请先填写第 1 行的棚号」（只此一行是特例，其余行规则不变）
+- [x] 首行「棚数」超额（下面各行分走的比总棚数还多）时黄底红框提示；原「手填棚数要先填棚号」的拦截已随棚数只读移除
 - [x] 所有弹窗压在单元格编辑框之上（开弹窗前先收编辑 + 编辑器降层级）
 
 ### 视觉
@@ -521,7 +523,7 @@ mode = preferSystem ? SYSTEM
 ## 会话交接（新开对话时先读这里）
 
 **项目位置**
-- 鸿蒙：`D:\mixcalc-harmony`（包名 `com.shrimpfarm.mixcalc`，版本 0.3.4 / versionCode 1000304）
+- 鸿蒙：`D:\mixcalc-harmony`（包名 `com.shrimpfarm.mixcalc`，版本 0.3.5 / versionCode 1000305）
 - 安卓：`D:\mixcalc-lab`（0.3.4 / versionCode 7）
 - 远端：Gitee `xia-guard/mixcalc-harmony`、`xia-guard/mixcalc-lab`；GitHub `DTxiaweibing/mixcalc-harmony`、`DTxiaweibing/mixcalc-lab`（**必须走 SSH**，443 常被网络重置）
 
@@ -531,7 +533,7 @@ $root='D:\command-line-tools\command-line-tools'
 $env:PATH="$root\bin;$root\tool\node;$env:PATH"; $env:DEVECO_SDK_HOME="$root\sdk"
 cd D:\mixcalc-harmony
 hvigorw.bat assembleHap --mode module -p product=default -p buildMode=debug --no-daemon
-hdc tconn 192.168.10.104:42085
+hdc tconn 192.168.10.103:42085
 hdc -t <dev> install -r entry\build\default\outputs\default\entry-default-signed.hap
 hdc -t <dev> shell aa force-stop -b com.shrimpfarm.mixcalc
 hdc -t <dev> shell aa start -a EntryAbility -b com.shrimpfarm.mixcalc
@@ -540,7 +542,7 @@ hdc -t <dev> shell aa start -a EntryAbility -b com.shrimpfarm.mixcalc
 
 **必读技能**：`harmony-arkui-input-focus`（输入框/键盘/焦点全是坑）、`android-custom-table`（对照安卓做法）
 
-**当前状态**：功能对齐已完成（编辑、顺序录入、隐私弹窗、表尾、颜色、字号、惯性）；平板 11 列已验证；已改为“手机锁竖屏 + 平板自动旋转 + 横竖屏统一 RESIZE（表尾始终在键盘上方）”；0.3.5 的 P0 快捷设置窗口自适应 / 11 列隐藏、P1 表头弹窗右边缘对齐、折叠屏按窗口宽度切布局已于 2026-11-02 云调试全矩阵通过并定版 0.3.5；剩上架准备。
+**当前状态**：功能对齐已完成（编辑、顺序录入、隐私弹窗、表尾、颜色、字号、惯性）；平板 11 列已验证；已改为“手机锁竖屏 + 平板自动旋转 + 横竖屏统一 RESIZE（表尾始终在键盘上方）”；0.3.5 的 P0 快捷设置窗口自适应 / 11 列隐藏、P1 表头弹窗右边缘对齐、折叠屏按窗口宽度切布局已于 2026-11-02 云调试全矩阵通过并定版 0.3.5；2026-11-07 完成棚号打点覆盖（后行优先去重）、棚数只读、棚号上限 1000 + 超限提示，并已重新打包装到 192.168.10.103（`dist/mixcalc-0.3.5-debug-signed.hap`，debug 自动签名）；剩上架准备。
 
 
 ## 已知差异 / 待复核

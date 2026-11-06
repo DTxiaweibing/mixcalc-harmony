@@ -336,8 +336,12 @@ struct Index {
     const rows: FeedData[] = this.currentBatch().rows;
     for (let i = 0; i < rows.length; i++) {
       const r: FeedData = rows[i];
+      // 棚号被后面的行覆盖成 0 的行不参与合计（与表尾口径一致）
+      if (r.shedCount <= 0) {
+        continue;
+      }
       sumIngredients += r.fermented + r.powder + r.feed03 + r.feed05 + r.feed10 + r.water;
-      if (r.shedCount > 0 && r.weighed > 0) {
+      if (r.weighed > 0) {
         sumWeighed += Math.round(r.weighed * 100) / 100 * r.shedCount;
       }
       if (r.fermented !== 0 || r.powder !== 0 || r.feed03 !== 0 || r.feed05 !== 0

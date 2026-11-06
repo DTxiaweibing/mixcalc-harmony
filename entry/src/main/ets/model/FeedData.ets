@@ -1,3 +1,5 @@
+import { parseShedNumbers } from './ShedCoverage';
+
 const NF_POWDER: number = 0;
 const NF_FEED03: number = 1;
 const NF_FEED05: number = 2;
@@ -6,9 +8,6 @@ const NF_FEED10: number = 3;
 export class FeedData {
   shedNumber: string = '';
   shedCount: number = 0;
-  defaultShedCount: number = 0;
-  shedCountBase: number = 0;
-  shedCountBaseSum: number = 0;
   average: number = 0;
   fermented: number = 0;
   powder: number = 0;
@@ -18,15 +17,12 @@ export class FeedData {
   water: number = 0;
   weighed: number = 0;
   switchRatio: number = 0;
-  isShedCountManuallyModified: boolean = false;
   isAverageManuallyModified: boolean = false;
 
   toJson(): Record<string, Object> {
     return {
       'shedNumber': this.shedNumber,
       'shedCount': this.shedCount,
-      'shedCountBase': this.shedCountBase,
-      'shedCountBaseSum': this.shedCountBaseSum,
       'average': this.average,
       'fermented': this.fermented,
       'powder': this.powder,
@@ -36,7 +32,6 @@ export class FeedData {
       'water': this.water,
       'weighed': this.weighed,
       'switchRatio': this.switchRatio,
-      'isShedCountManuallyModified': this.isShedCountManuallyModified,
       'isAverageManuallyModified': this.isAverageManuallyModified
     };
   }
@@ -44,8 +39,6 @@ export class FeedData {
   fromJson(obj: Record<string, Object>): void {
     this.shedNumber = obj['shedNumber'] as string;
     this.shedCount = obj['shedCount'] as number;
-    this.shedCountBase = obj['shedCountBase'] as number;
-    this.shedCountBaseSum = obj['shedCountBaseSum'] as number;
     this.average = obj['average'] as number;
     this.fermented = obj['fermented'] as number;
     this.powder = obj['powder'] as number;
@@ -55,63 +48,22 @@ export class FeedData {
     this.water = obj['water'] as number;
     this.weighed = obj['weighed'] as number;
     this.switchRatio = obj['switchRatio'] as number;
-    this.isShedCountManuallyModified = obj['isShedCountManuallyModified'] as boolean;
     this.isAverageManuallyModified = obj['isAverageManuallyModified'] as boolean;
   }
   setShedNumber(value: string): void {
     this.shedNumber = value;
-    // 与安卓一致：只在未手动改过棚数时按棚号重新解析
-    if (!this.isShedCountManuallyModified) {
-      this.calculateShedCount();
-    }
-  }
-
-  private isValidNumber(text: string): boolean {
-    return text.replace(/[^0-9]/g, '').length > 0;
-  }
-
-  private parsePart(part: string): number {
-    if (part.length === 0) {
-      return 0;
-    }
-    let normalized: string = part
-      .replace(/到/g, '-')
-      .replace(/至/g, '-')
-      .replace(/~/g, '-')
-      .replace(/—/g, '-');
-    if (normalized.indexOf('-') >= 0) {
-      // 与安卓一致：只取最前面的两段（split("-", 2)）
-      let seg: string[] = normalized.split('-', 2);
-      if (seg.length >= 2) {
-        let a: number = parseInt(seg[0].replace(/[^0-9]/g, ''), 10);
-        let b: number = parseInt(seg[1].replace(/[^0-9]/g, ''), 10);
-        if (!isNaN(a) && !isNaN(b) && a > 0 && b > 0) {
-          return Math.abs(b - a) + 1;
-        }
-      }
-    }
-    return this.isValidNumber(part) ? 1 : 0;
+    this.calculateShedCount();
   }
 
   calculateShedCount(): void {
-    if (this.isShedCountManuallyModified) {
-      return;
-    }
-    let text: string = this.shedNumber.trim();
+    const text: string = this.shedNumber.trim();
     if (text.length === 0) {
       this.shedCount = 0;
-      this.defaultShedCount = 0;
       return;
     }
-    let parts: string[] = text.split(/[,，、\s]+/);
-    let total: number = 0;
-    for (let i = 0; i < parts.length; i++) {
-      if (parts[i].trim().length > 0) {
-        total += this.parsePart(parts[i].trim());
-      }
-    }
-    this.shedCount = Math.max(0, total);
-    this.defaultShedCount = this.shedCount;
+    // 同一行里重复写的棚号只算一次；跨行重叠由表格层的打点覆盖处理
+    const numbers: number[] = parseShedNumbers(text);
+    this.shedCount = numbers.length;
   }
 
   private nonFermentedSum(): number {
@@ -296,9 +248,7 @@ export class FeedData {
     if (this.countNonFermentedFeeds() !== 2) {
       this.switchRatio = 0;
     }
-    if (!this.isShedCountManuallyModified) {
-      this.calculateShedCount();
-    }
+    this.calculateShedCount();
     this.recalculateDerivedOnly(waterPercentage, fermentedInWater, fermentedInAverage);
   }
 }

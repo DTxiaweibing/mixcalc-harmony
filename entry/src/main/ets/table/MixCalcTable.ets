@@ -1,4 +1,5 @@
 import { FeedData } from '../model/FeedData';
+import { ownedCounts, findOverLimit, MAX_SHED_NUMBER } from '../model/ShedCoverage';
 import { t } from '../common/Strings';
 import { promptAction } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
@@ -316,6 +317,8 @@ export struct MixCalcTable {
 
   private editRow: number = -1;
   private editCol: number = -1;
+  // 超上限提示每次编辑只弹一次，别敲一个字符弹一次
+  private overLimitWarned: boolean = false;
   private editorTitle: string = '';
   private editorValue: string = '';
   private editorIsNumber: boolean = false;
@@ -689,7 +692,8 @@ export struct MixCalcTable {
   }
 
   private isWarningCell(data: FeedData, column: number, rowIndex: number): boolean {
-    return column === 2 && rowIndex === 0 && data.shedCountBase > 0 && data.shedCount <= 0;
+    // 后面的行分走的棚数超过第一行填的总棚数：第一行棚数变 0/负数，报警
+    return column === 2 && rowIndex === 0 && data.shedNumber.trim().length > 0 && data.shedCount <= 0;
   }
 
   private isCellEnabled(data: FeedData, column: number): boolean {
@@ -759,7 +763,8 @@ export struct MixCalcTable {
 
   // ===== 编辑 =====
   private isEditableColumn(column: number): boolean {
-    return column >= 1 && column <= 8;
+    // 棚数(2)由棚号自动算出，不允许手改；序号、水质、称料也不可改
+    return column === 1 || column === 3 || (column >= 4 && column <= 8);
   }
 
   private nfIndexOf(column: number): number {
@@ -807,8 +812,6 @@ export struct MixCalcTable {
     row.feed10 = 0;
     row.water = 0;
     row.weighed = 0;
-    row.shedCountBase = 0;
-    row.shedCountBaseSum = 0;
     row.switchRatio = 0;
     row.isAverageManuallyModified = false;
   }
@@ -821,6 +824,26 @@ export struct MixCalcTable {
     return sum;
   }
 
+  // 打点覆盖：后一行覆盖前一行的重叠棚号，把每行实际占有的棚数写回 shedCount。
+  private applyShedCoverage(): void {
+    if (this.rows.length < 2) {
+      return;
+    }
+    const texts: string[] = [];
+    for (let i = 0; i < this.rows.length; i++) {
+      texts.push(this.rows[i].shedNumber);
+    }
+    const owned: number[] = ownedCounts(texts);
+    for (let i = 1; i < this.rows.length; i++) {
+      const row: FeedData = this.rows[i];
+      const count: number = owned[i];
+      if (row.shedCount !== count) {
+        row.shedCount = count;
+        row.recalculateDerivedOnly(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+      }
+    }
+  }
+
   private recomputeFirstRow(): void {
     if (this.rows.length < 2) {
       return;
@@ -829,24 +852,14 @@ export struct MixCalcTable {
     const oldCount: number = first.shedCount;
     const oldAverage: number = first.average;
 
-    if (!first.isShedCountManuallyModified) {
-      first.calculateShedCount();
-      first.shedCountBase = first.shedCount;
-      first.shedCountBaseSum = 0;
-    } else if (first.shedCountBase <= 0) {
-      if (first.shedCount > 0) {
-        first.shedCountBase = first.shedCount;
-        first.shedCountBaseSum = 0;
-      } else {
-        first.isShedCountManuallyModified = false;
-        first.calculateShedCount();
-        first.shedCountBase = first.shedCount;
-        first.shedCountBaseSum = 0;
-      }
-    }
+    // 第一行的棚号区间就是总棚数，后面的行从里面分；棚数一律由棚号算出，不能手改
+    first.calculateShedCount();
+    const base: number = first.shedCount;
+
+    this.applyShedCoverage();
 
     const sum: number = this.sumBelowFirst();
-    const remainder: number = first.shedCountBase - (sum - first.shedCountBaseSum);
+    const remainder: number = base - sum;
     first.shedCount = remainder;
 
     if (remainder !== oldCount && oldAverage > 0 && !first.isAverageManuallyModified) {
@@ -863,25 +876,22 @@ export struct MixCalcTable {
     const row: FeedData = this.rows[this.editRow];
     const value: string = text.trim();
     const col: number = this.editCol;
+    const over: number = col === 1 ? findOverLimit(value) : 0;
+    if (over > 0) {
+      this.warnOverLimit();
+    } else {
+      this.overLimitWarned = false;
+    }
     let number: number = value.length === 0 ? 0 : Number(value);
     if (isNaN(number)) {
       number = 0;
     }
 
     if (col === 1) {
-      // 改棚号就以这次为准：清掉“棚数手改过”的标记，按新棚号重新算棚数
-      row.isShedCountManuallyModified = false;
+      // 棚数由棚号自动算，改棚号即可；棚数格子不允许手改
       row.setShedNumber(value);
       if (value.length === 0) {
         this.clearRowData(row, true);
-      }
-    } else if (col === 2) {
-      const newCount: number = Math.round(number);
-      row.shedCount = newCount;
-      row.isShedCountManuallyModified = !(newCount === 0 || value.length === 0);
-      if (this.editRow === 0) {
-        row.shedCountBase = newCount;
-        row.shedCountBaseSum = this.sumBelowFirst();
       }
     } else if (col === 3) {
       row.setAverageManually(number, this.fermentedInAverage);
@@ -903,7 +913,9 @@ export struct MixCalcTable {
       row.switchRatio = 0;
     }
 
-    if (this.editRow !== 0 && row.shedCount <= 0) {
+    // 超上限的输入整段不计棚数，这时别顺手把这一行已有的料清掉，
+    // 等用户把棚号改回来，料量会自动接着算
+    if (over === 0 && this.editRow !== 0 && row.shedCount <= 0) {
       row.fermented = 0;
       row.powder = 0;
       row.feed03 = 0;
@@ -1178,6 +1190,7 @@ export struct MixCalcTable {
 
   // 编辑器保持同一个节点、只换坐标和初值：不动焦点，键盘才不会收
   private moveEditor(row: number, column: number): void {
+    this.overLimitWarned = false;
     this.editRow = row;
     this.editCol = column;
     this.editingSeed = this.currentValue(row, column);
@@ -1292,10 +1305,22 @@ export struct MixCalcTable {
   // 第一行棚号的格式提示：带「查看帮助」，关掉后把焦点还回输入框
   private showShedHint(): void {
     this.hintTitle = t(this.lang, 'shed.hintTitle');
-    this.hintMessage = t(this.lang, 'shed.hintMessage');
+    this.hintMessage = t(this.lang, 'shed.hintMessage').replace('%d', MAX_SHED_NUMBER.toString());
     this.hintSecondaryText = t(this.lang, 'btn.viewHelp');
     this.hintRefocus = true;
     this.hintController.open();
+  }
+
+  // 棚号超过上限：一边输一边提示，但同一次编辑只提示一次
+  private warnOverLimit(): void {
+    if (this.overLimitWarned) {
+      return;
+    }
+    this.overLimitWarned = true;
+    promptAction.showToast({
+      message: t(this.lang, 'shed.overLimit').replace('%d', MAX_SHED_NUMBER.toString()),
+      duration: 2000
+    });
   }
   private openEditor(row: number, column: number): void {
     if (!this.isEditableColumn(column) || row < 0 || row >= this.rows.length) {
@@ -1310,14 +1335,6 @@ export struct MixCalcTable {
     if (firstEmpty >= 0 && row > firstEmpty && !this.rowHasInput(row)) {
       this.showOrderHint();
       return;
-    }
-    // 特例：只有第一行的「棚数」要求先填棚号（其余行维持原规则）
-    if (row === 0 && column === 2) {
-      const firstRow: FeedData = this.rows[0];
-      if (firstRow.shedNumber.trim().length === 0 && firstRow.shedCount <= 0) {
-        this.showOrderHint();
-        return;
-      }
     }
     // 第一次点第一行「棚号」：先告诉用户怎么填（只提示一次）
     if (row === 0 && column === 1) {
@@ -1337,6 +1354,7 @@ export struct MixCalcTable {
       this.applyEdit(this.editingText, true);
     }
     this.editDirty = false;
+    this.overLimitWarned = false;
     this.editRow = row;
     this.editCol = column;
     this.editorTitle = this.headLabel(column) + ' · ' + t(this.lang, 'dlg.row').replace('%d', (row + 1).toString());
@@ -1506,8 +1524,15 @@ export struct MixCalcTable {
     let s: number = 0;
     for (let i = 0; i < this.rows.length; i++) {
       const r: FeedData = this.rows[i];
+      if (column === 2) {
+        s += r.shedCount;
+        continue;
+      }
+      // 棚数被后面的行覆盖成 0 的行不参与料/水合计，否则重叠棚的料会算两遍
+      if (r.shedCount <= 0) {
+        continue;
+      }
       switch (column) {
-        case 2: s += r.shedCount; break;
         case 4: s += r.fermented; break;
         case 5: s += r.powder; break;
         case 6: s += r.feed03; break;
