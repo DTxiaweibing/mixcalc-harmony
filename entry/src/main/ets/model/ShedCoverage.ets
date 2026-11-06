@@ -127,13 +127,13 @@ export function findOverLimit(raw: string): number {
 }
 
 /**
- * 打点覆盖：按行序把棚号铺开，后面的行覆盖前面的行，返回每行实际占有的棚数。
+ * 打点覆盖：按行序把棚号铺开，后面的行覆盖前面的行，返回每行实际占有的棚号（升序）。
  * 传空字符串的行不参与占位。
  */
-export function ownedCounts(texts: string[]): number[] {
-  const counts: number[] = [];
+export function ownedSets(texts: string[]): number[][] {
+  const sets: number[][] = [];
   for (let i = 0; i < texts.length; i++) {
-    counts.push(0);
+    sets.push([]);
   }
   const owner: Map<number, number> = new Map<number, number>();
   for (let i = 0; i < texts.length; i++) {
@@ -142,9 +142,24 @@ export function ownedCounts(texts: string[]): number[] {
       owner.set(nums[j], i);
     }
   }
-  owner.forEach((rowIndex: number) => {
-    counts[rowIndex] = counts[rowIndex] + 1;
+  owner.forEach((rowIndex: number, shed: number) => {
+    sets[rowIndex].push(shed);
   });
+  for (let i = 0; i < sets.length; i++) {
+    sets[i].sort((a: number, b: number) => a - b);
+  }
+  return sets;
+}
+
+/**
+ * 打点覆盖：返回每行实际占有的棚数（= ownedSets 每行长度）。
+ */
+export function ownedCounts(texts: string[]): number[] {
+  const sets: number[][] = ownedSets(texts);
+  const counts: number[] = [];
+  for (let i = 0; i < sets.length; i++) {
+    counts.push(sets[i].length);
+  }
   return counts;
 }
 

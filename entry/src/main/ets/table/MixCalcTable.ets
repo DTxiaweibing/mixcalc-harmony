@@ -1,5 +1,5 @@
 import { FeedData } from '../model/FeedData';
-import { ownedCounts, findOverLimit, MAX_SHED_NUMBER } from '../model/ShedCoverage';
+import { ownedCounts, ownedSets, findOverLimit, MAX_SHED_NUMBER } from '../model/ShedCoverage';
 import { t } from '../common/Strings';
 import { promptAction } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
@@ -378,6 +378,17 @@ export struct MixCalcTable {
     customStyle: true
   });
 
+  // 棚数按钮点开的本行棚号气泡（跟随被点单元格的下沿）
+  @State shedListOpen: boolean = false;
+  @State shedListX: number = 0;
+  @State shedListY: number = 0;
+  @State shedListW: number = 0;
+  @State shedListScrollH: number = 60;
+  @State shedListTitleText: string = '';
+  @State shedListCountText: string = '';
+  @State shedListNumbers: number[] = [];
+  private shedListOpenedAt: number = 0;
+
   // ===== 列状态 =====
   private isVisible(index: number): boolean {
     if (index === 0) {
@@ -468,6 +479,7 @@ export struct MixCalcTable {
       this.colMenuOpen = false;
       this.pickOpen = false;
       this.ratioOpen = false;
+      this.shedListOpen = false;
       this.onViewWidth(widthVp);
     }
     // 变宽后旧的横向滚动量可能超出新内容宽，不收就会在右侧留一条空白
@@ -684,6 +696,10 @@ export struct MixCalcTable {
   private cellColor(column: number): string {
     if (column === 0) {
       return '#666666';
+    }
+    // 棚数是可点的按钮，用深绿提示可点
+    if (column === 2) {
+      return '#1F6B30';
     }
     if (column === 3 || column === 9 || column === 10) {
       return '#0000FF';
@@ -1322,8 +1338,104 @@ export struct MixCalcTable {
       duration: 2000
     });
   }
+
+  // 本行棚数对应的棚号（打点覆盖之后真正归本行的号码）
+  private shedNumbersOf(rowIndex: number): number[] {
+    if (rowIndex < 0 || rowIndex >= this.rows.length) {
+      return [];
+    }
+    const texts: string[] = [];
+    for (let i = 0; i < this.rows.length; i++) {
+      texts.push(this.rows[i].shedNumber);
+    }
+    const sets: number[][] = ownedSets(texts);
+    return sets[rowIndex];
+  }
+
+  // 棚号块区域高度：按 28vp + 2vp 间距估算行数
+  private badgeAreaHeight(count: number, boxW: number): number {
+    if (count <= 0) {
+      return 0;
+    }
+    const usableW: number = Math.max(80, boxW - 12);
+    const perRow: number = Math.max(1, Math.floor(usableW / 30));
+    const rows: number = Math.max(1, Math.ceil(count / perRow));
+    return rows * 30 + 18;
+  }
+
+  // 点「棚数」：在格子下沿弹出本行实际的棚号；棚数为 0 的行不弹
+  private showShedList(rowIndex: number): void {
+    if (rowIndex < 0 || rowIndex >= this.rows.length) {
+      return;
+    }
+    if (this.rows[rowIndex].shedCount <= 0) {
+      return;
+    }
+    const numbers: number[] = this.shedNumbersOf(rowIndex);
+    if (numbers.length === 0) {
+      return;
+    }
+    this.finishEdit();
+    const maxW: number = Math.max(180, this.viewW - 16);
+    const capW: number = Math.min(Math.max(200, this.viewW * 0.8), maxW);
+    // 号码块按实际宽度紧凑排：左右只留 6vp，能多塞一个就多塞一个
+    const needW: number = 12 + numbers.length * 30;
+    let w: number = Math.min(capW, Math.max(170, needW));
+    const cellLeft: number = this.columnLeft(2);
+    let x: number = Math.max(6, cellLeft);
+    if (x + w > this.viewW - 4) {
+      const fitW: number = this.viewW - x - 4;
+      if (fitW >= 170) {
+        w = fitW;
+      } else {
+        w = capW;
+        x = Math.max(6, this.viewW - w - 4);
+      }
+    }
+    const badgeH: number = this.badgeAreaHeight(numbers.length, w);
+    const headH: number = 40;
+    const contentH: number = headH + badgeH;
+    // 上边贴住单元格下沿（表头高 + 行号*行高 - 滚动量）
+    const cellBottom: number = this.hh() + (rowIndex + 1) * this.rh() - this.offsetY;
+    const bodyBottom: number = this.hh() + this.viewH;
+    const gap: number = 2;
+    let y: number = cellBottom + gap;
+    let scrollH: number = badgeH;
+    const avail: number = bodyBottom - 8 - y;
+    if (avail < contentH) {
+      if (avail >= 120) {
+        // 下面地方不够就缩短气泡、内部滚动，上边仍然贴住格子
+        scrollH = Math.max(40, avail - headH);
+      } else {
+        // 实在放不下：整块翻到格子上方，但仍是跟着这一行
+        scrollH = badgeH;
+        y = Math.max(8, cellBottom - this.rh() - contentH - gap);
+      }
+    }
+    this.shedListNumbers = numbers;
+    this.shedListTitleText = t(this.lang, 'shedList.title').replace('%d', (rowIndex + 1).toString());
+    this.shedListCountText = t(this.lang, 'shedList.count').replace('%d', numbers.length.toString());
+    this.shedListW = w;
+    this.shedListX = x;
+    this.shedListY = y;
+    this.shedListScrollH = scrollH;
+    this.shedListOpenedAt = Date.now();
+    this.shedListOpen = true;
+  }
   private openEditor(row: number, column: number): void {
-    if (!this.isEditableColumn(column) || row < 0 || row >= this.rows.length) {
+    if (row < 0 || row >= this.rows.length) {
+      return;
+    }
+    // 「棚数」是按钮：点开看本行实际的棚号列表，不进编辑、不弹键盘
+    if (column === 2) {
+      if (this.editingRow >= 0 && this.editDirty) {
+        this.applyEdit(this.editingText, true);
+      }
+      this.editDirty = false;
+      this.showShedList(row);
+      return;
+    }
+    if (!this.isEditableColumn(column)) {
       return;
     }
     if (!this.isCellEnabled(this.rows[row], column)) {
@@ -2122,6 +2234,78 @@ export struct MixCalcTable {
         .clip(true)
         .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
         .position({ x: this.ratioX, y: this.ratioY })
+      }
+
+      // 棚数按钮 → 本行棚号气泡（上边贴着被点单元格的下沿）
+      if (this.shedListOpen) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor('#00000000')
+          .onClick(() => {
+            // 点格子那一下不要立刻把刚弹出来的气泡点掉
+            if (Date.now() - this.shedListOpenedAt < 350) {
+              return;
+            }
+            this.shedListOpen = false;
+          })
+
+        Column() {
+          Row() {
+            Text(this.shedListTitleText)
+              .fontSize(15)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#000000')
+              .layoutWeight(1)
+            Text(this.shedListCountText)
+              .fontSize(12)
+              .fontColor('#666666')
+          }
+          .width('100%')
+          .height(40)
+          .padding({ left: 10, right: 10 })
+
+          Divider().strokeWidth(1).color('#E0E0E0')
+
+          if (this.shedListNumbers.length === 0) {
+            Text(t(this.lang, 'shedList.empty'))
+              .width('100%')
+              .fontSize(13)
+              .fontColor('#999999')
+              .textAlign(TextAlign.Center)
+              .padding({ top: 14, bottom: 14 })
+          } else {
+            Scroll() {
+              Flex({ wrap: FlexWrap.Wrap }) {
+                ForEach(this.shedListNumbers, (n: number) => {
+                  // 默认 28×28 圆点；数字变宽（3 位以上）自动撑成胶囊，高度不变
+                  Text(n.toString())
+                    .height(28)
+                    .constraintSize({ minWidth: 28 })
+                    .padding({ left: 6, right: 6 })
+                    .borderRadius(14)
+                    .backgroundColor('#A8DDB5')
+                    .fontColor('#000000')
+                    .fontSize(13)
+                    .fontWeight(FontWeight.Bold)
+                    .textAlign(TextAlign.Center)
+                    .margin({ right: 2, bottom: 2 })
+                }, (n: number) => 's' + n.toString())
+              }
+              .width('100%')
+            }
+            .width('100%')
+            .height(this.shedListScrollH)
+            .scrollBar(BarState.Auto)
+            .padding({ left: 6, right: 6, top: 10, bottom: 8 })
+          }
+        }
+        .width(this.shedListW)
+        .backgroundColor(Color.White)
+        .borderRadius(12)
+        .clip(true)
+        .shadow({ radius: 12, color: '#33000000', offsetX: 0, offsetY: 3 })
+        .position({ x: this.shedListX, y: this.shedListY })
       }
     }
     .width('100%')
