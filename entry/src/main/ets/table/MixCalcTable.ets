@@ -29,7 +29,7 @@ struct CellEditorDialog {
   build() {
     Column() {
       Text(this.title)
-        .fontSize(18)
+        .fontSize('18vp')
         .fontWeight(FontWeight.Bold)
         .fontColor('#000000')
         .padding({ top: 16, bottom: 12 })
@@ -38,7 +38,7 @@ struct CellEditorDialog {
 
       TextInput({ text: this.input })
         .type(this.isNumber ? InputType.NUMBER_DECIMAL : InputType.Normal)
-        .fontSize(16)
+        .fontSize('16vp')
         .textAlign(TextAlign.Center)
         .height(44)
         .margin({ left: 20, right: 20, top: 12 })
@@ -54,7 +54,7 @@ struct CellEditorDialog {
           .height(44)
           .borderRadius(0)
           .backgroundColor(Color.Transparent)
-          .fontSize(15)
+          .fontSize('15vp')
           .fontWeight(FontWeight.Bold)
           .fontColor('#666666')
           .onClick(() => {
@@ -69,7 +69,7 @@ struct CellEditorDialog {
           .height(44)
           .borderRadius(0)
           .backgroundColor(Color.Transparent)
-          .fontSize(15)
+          .fontSize('15vp')
           .fontWeight(FontWeight.Bold)
           .fontColor('#2D8C42')
           .onClick(() => {
@@ -100,7 +100,7 @@ struct ConfirmDialog {
   build() {
     Column() {
       Text(this.title)
-        .fontSize(18)
+        .fontSize('18vp')
         .fontWeight(FontWeight.Bold)
         .fontColor('#000000')
         .width('100%')
@@ -110,7 +110,7 @@ struct ConfirmDialog {
       Divider().strokeWidth(1).color('#E0E0E0')
 
       Text(this.message)
-        .fontSize(15)
+        .fontSize('15vp')
         .fontColor('#333333')
         .textAlign(TextAlign.Center)
         .lineHeight(23)
@@ -125,7 +125,7 @@ struct ConfirmDialog {
           .height(48)
           .borderRadius(0)
           .backgroundColor(Color.Transparent)
-          .fontSize(15)
+          .fontSize('15vp')
           .fontWeight(FontWeight.Bold)
           .fontColor('#666666')
           .onClick(() => {
@@ -140,7 +140,7 @@ struct ConfirmDialog {
           .height(48)
           .borderRadius(0)
           .backgroundColor(Color.Transparent)
-          .fontSize(15)
+          .fontSize('15vp')
           .fontWeight(FontWeight.Bold)
           .fontColor(this.confirmColor)
           .onClick(() => {
@@ -172,7 +172,7 @@ struct HintDialog {
   build() {
     Column() {
       Text(this.title)
-        .fontSize(18)
+        .fontSize('18vp')
         .fontWeight(FontWeight.Bold)
         .fontColor('#000000')
         .width('100%')
@@ -182,7 +182,7 @@ struct HintDialog {
       Divider().strokeWidth(1).color('#E0E0E0')
 
       Text(this.message)
-        .fontSize(15)
+        .fontSize('15vp')
         .fontColor('#333333')
         .textAlign(TextAlign.Center)
         .lineHeight(23)
@@ -198,7 +198,7 @@ struct HintDialog {
             .height(48)
             .borderRadius(0)
             .backgroundColor(Color.Transparent)
-            .fontSize(15)
+            .fontSize('15vp')
             .fontWeight(FontWeight.Bold)
             .fontColor('#2D8C42')
             .onClick(() => {
@@ -212,7 +212,7 @@ struct HintDialog {
             .height(48)
             .borderRadius(0)
             .backgroundColor(Color.Transparent)
-            .fontSize(15)
+            .fontSize('15vp')
             .fontWeight(FontWeight.Bold)
             .fontColor('#2D8C42')
             .onClick(() => {
@@ -228,7 +228,7 @@ struct HintDialog {
           .height(48)
           .borderRadius(0)
           .backgroundColor(Color.Transparent)
-          .fontSize(15)
+          .fontSize('15vp')
           .fontWeight(FontWeight.Bold)
           .fontColor('#2D8C42')
           .onClick(() => {
@@ -590,8 +590,14 @@ export struct MixCalcTable {
     return HEAD_H;
   }
 
-  private fs(): number {
-    return 14;
+  // 字号固定：用 vp 而不是 fp，不随系统字体大小缩放
+  private fs(): string {
+    return '15vp';
+  }
+
+  // 表头单独一号：比正文小 1vp
+  private fsHeader(): string {
+    return '14vp';
   }
 
   // 自绘光标（数字列没有系统输入框，只能自己闪）
@@ -708,8 +714,8 @@ export struct MixCalcTable {
   }
 
   private isWarningCell(data: FeedData, column: number, rowIndex: number): boolean {
-    // 后面的行分走的棚数超过第一行填的总棚数：第一行棚数变 0/负数，报警
-    return column === 2 && rowIndex === 0 && data.shedNumber.trim().length > 0 && data.shedCount <= 0;
+    // 所有行平等：不再有“第一行 = 总棚数”，也就没有超额报警
+    return false;
   }
 
   private isCellEnabled(data: FeedData, column: number): boolean {
@@ -840,9 +846,9 @@ export struct MixCalcTable {
     return sum;
   }
 
-  // 打点覆盖：后一行覆盖前一行的重叠棚号，把每行实际占有的棚数写回 shedCount。
+  // 打点覆盖：后一行覆盖前一行的重叠棚号，所有行一视同仁，把实际占有的棚数写回 shedCount。
   private applyShedCoverage(): void {
-    if (this.rows.length < 2) {
+    if (this.rows.length < 1) {
       return;
     }
     const texts: string[] = [];
@@ -850,39 +856,24 @@ export struct MixCalcTable {
       texts.push(this.rows[i].shedNumber);
     }
     const owned: number[] = ownedCounts(texts);
-    for (let i = 1; i < this.rows.length; i++) {
+    for (let i = 0; i < this.rows.length; i++) {
       const row: FeedData = this.rows[i];
       const count: number = owned[i];
       if (row.shedCount !== count) {
+        // 棚数变了：平均不动，料量按“平均 × 新棚数”重算
+        const oldAverage: number = row.average;
         row.shedCount = count;
+        if (oldAverage > 0 && row.canEditAverage()) {
+          row.setAverageManually(oldAverage, this.fermentedInAverage);
+        }
         row.recalculateDerivedOnly(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
       }
     }
   }
 
   private recomputeFirstRow(): void {
-    if (this.rows.length < 2) {
-      return;
-    }
-    const first: FeedData = this.rows[0];
-    const oldCount: number = first.shedCount;
-    const oldAverage: number = first.average;
-
-    // 第一行的棚号区间就是总棚数，后面的行从里面分；棚数一律由棚号算出，不能手改
-    first.calculateShedCount();
-    const base: number = first.shedCount;
-
+    // 所有行平等：只做打点覆盖，没有“第一行 = 总棚数”这回事
     this.applyShedCoverage();
-
-    const sum: number = this.sumBelowFirst();
-    const remainder: number = base - sum;
-    first.shedCount = remainder;
-
-    if (remainder !== oldCount && oldAverage > 0 && !first.isAverageManuallyModified) {
-      first.average = oldAverage;
-      first.isAverageManuallyModified = true;
-    }
-    first.recalculateDerivedOnly(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
   }
 
   private applyEdit(text: string, persist: boolean = true): void {
@@ -905,7 +896,13 @@ export struct MixCalcTable {
 
     if (col === 1) {
       // 棚数由棚号自动算，改棚号即可；棚数格子不允许手改
+      const oldCount: number = row.shedCount;
+      const oldAverage: number = row.average;
       row.setShedNumber(value);
+      if (row.shedCount !== oldCount && oldAverage > 0 && row.canEditAverage()) {
+        // 改棚号本质是改棚数：平均保持不变，料量重算
+        row.setAverageManually(oldAverage, this.fermentedInAverage);
+      }
       if (value.length === 0) {
         this.clearRowData(row, true);
       }
@@ -931,7 +928,7 @@ export struct MixCalcTable {
 
     // 超上限的输入整段不计棚数，这时别顺手把这一行已有的料清掉，
     // 等用户把棚号改回来，料量会自动接着算
-    if (over === 0 && this.editRow !== 0 && row.shedCount <= 0) {
+    if (over === 0 && row.shedCount <= 0) {
       row.fermented = 0;
       row.powder = 0;
       row.feed03 = 0;
@@ -944,9 +941,8 @@ export struct MixCalcTable {
       row.switchRatio = 0;
     }
 
-    if (this.editRow !== 0) {
-      row.updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
-    }
+    // 所有行一视同仁
+    row.updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
     this.recomputeFirstRow();
     this.version = this.version + 1;
     if (persist) {
@@ -1025,7 +1021,7 @@ export struct MixCalcTable {
           .width('100%')
           .height(110)
           .margin(3)
-          .fontSize(16)
+          .fontSize('16vp')
           .fontColor(Color.White)
           .textAlign(TextAlign.Center)
           .backgroundColor('#2D8C42')
@@ -1049,7 +1045,7 @@ export struct MixCalcTable {
       .layoutWeight(1)
       .height(52)
       .margin(3)
-      .fontSize(22)
+      .fontSize('22vp')
       .fontColor('#000000')
       .textAlign(TextAlign.Center)
       .backgroundColor(Color.White)
@@ -1066,7 +1062,7 @@ export struct MixCalcTable {
       .width('100%')
       .height(52)
       .margin(3)
-      .fontSize(18)
+      .fontSize('18vp')
       .fontColor('#000000')
       .textAlign(TextAlign.Center)
       .backgroundColor('#D8D8D8')
@@ -1352,13 +1348,13 @@ export struct MixCalcTable {
     return sets[rowIndex];
   }
 
-  // 棚号块区域高度：按 28vp + 2vp 间距估算行数
-  private badgeAreaHeight(count: number, boxW: number): number {
+  // 棚号块区域高度：按实际号码块宽（最多几位数）算每行能放几个
+  private badgeAreaHeight(count: number, boxW: number, chipW: number): number {
     if (count <= 0) {
       return 0;
     }
     const usableW: number = Math.max(80, boxW - 12);
-    const perRow: number = Math.max(1, Math.floor(usableW / 30));
+    const perRow: number = Math.max(1, Math.floor(usableW / (chipW + 2)));
     const rows: number = Math.max(1, Math.ceil(count / perRow));
     return rows * 30 + 18;
   }
@@ -1376,10 +1372,20 @@ export struct MixCalcTable {
       return;
     }
     this.finishEdit();
+    // 号码块宽度随位数变化：1~2 位是 28vp 圆点，位数多了变胶囊
+    // 13vp 粗体一个数字约 6vp 宽（实测 3 位数块宽 30vp），按 6.2 估偏保守一点
+    let maxDigits: number = 1;
+    for (let i = 0; i < numbers.length; i++) {
+      const d: number = numbers[i].toString().length;
+      if (d > maxDigits) {
+        maxDigits = d;
+      }
+    }
+    const chipW: number = Math.max(28, Math.ceil(maxDigits * 6.2) + 12);
     const maxW: number = Math.max(180, this.viewW - 16);
     const capW: number = Math.min(Math.max(200, this.viewW * 0.8), maxW);
     // 号码块按实际宽度紧凑排：左右只留 6vp，能多塞一个就多塞一个
-    const needW: number = 12 + numbers.length * 30;
+    const needW: number = 12 + numbers.length * (chipW + 2);
     let w: number = Math.min(capW, Math.max(170, needW));
     const cellLeft: number = this.columnLeft(2);
     let x: number = Math.max(6, cellLeft);
@@ -1392,7 +1398,7 @@ export struct MixCalcTable {
         x = Math.max(6, this.viewW - w - 4);
       }
     }
-    const badgeH: number = this.badgeAreaHeight(numbers.length, w);
+    const badgeH: number = this.badgeAreaHeight(numbers.length, w, chipW);
     const headH: number = 40;
     const contentH: number = headH + badgeH;
     // 上边贴住单元格下沿（表头高 + 行号*行高 - 滚动量）
@@ -1403,11 +1409,11 @@ export struct MixCalcTable {
     let scrollH: number = badgeH;
     const avail: number = bodyBottom - 8 - y;
     if (avail < contentH) {
-      if (avail >= 120) {
-        // 下面地方不够就缩短气泡、内部滚动，上边仍然贴住格子
-        scrollH = Math.max(40, avail - headH);
+      if (avail >= headH + 34) {
+        // 弹窗高度最多到表尾行上沿：超出就内部滚动，不盖住表尾
+        scrollH = Math.max(34, avail - headH);
       } else {
-        // 实在放不下：整块翻到格子上方，但仍是跟着这一行
+        // 贴着表尾时下面实在放不下，才整块翻到格子上方
         scrollH = badgeH;
         y = Math.max(8, cellBottom - this.rh() - contentH - gap);
       }
@@ -1814,8 +1820,9 @@ export struct MixCalcTable {
       .fontWeight(FontWeight.Bold)
       .fontColor(this.cellColor(col))
       .textAlign(TextAlign.Center)
-      .maxLines(1)
-      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      // 棚号列：字号固定、不缩放，放不下自动换行（最多 2 行）
+      .maxLines(col === 1 ? 2 : 1)
+      .textOverflow({ overflow: col === 1 ? TextOverflow.Clip : TextOverflow.Ellipsis })
       .backgroundColor(this.cellFill(row, col, r))
       .border({ width: 0.5, color: this.cellBorderColor(row, col, r) })
       .onClick(() => {
@@ -1834,7 +1841,7 @@ export struct MixCalcTable {
     Text(this.headLabel(col))
       .width(this.cw(col))
       .height(this.hh())
-      .fontSize(this.fs())
+      .fontSize(this.fsHeader())
       .fontWeight(FontWeight.Bold)
       .fontColor('#000000')
       .textAlign(TextAlign.Center)
@@ -2064,7 +2071,7 @@ export struct MixCalcTable {
         // 只在键盘弹起时显示（键盘收起就跟着隐藏，与安卓一致）
         if (this.kbVisible) {
           Text(t(this.lang, 'pad.nextRow') + ' ▾')
-            .fontSize(13)
+            .fontSize('13vp')
             .fontColor(Color.White)
             .textAlign(TextAlign.Center)
             .width(76)
@@ -2098,7 +2105,7 @@ export struct MixCalcTable {
 
         Column() {
           Text(this.colMenuTitle)
-            .fontSize(18)
+            .fontSize('18vp')
             .fontWeight(FontWeight.Bold)
             .fontColor('#000000')
             .textAlign(TextAlign.Center)
@@ -2110,7 +2117,7 @@ export struct MixCalcTable {
             Row() {
               Text(item)
                 .layoutWeight(1)
-                .fontSize(15)
+                .fontSize('15vp')
                 .fontColor('#333333')
                 .textAlign(TextAlign.Center)
             }
@@ -2147,7 +2154,7 @@ export struct MixCalcTable {
 
         Column() {
           Text(this.pickTitle)
-            .fontSize(16)
+            .fontSize('16vp')
             .fontWeight(FontWeight.Bold)
             .fontColor('#000000')
             .textAlign(TextAlign.Center)
@@ -2159,7 +2166,7 @@ export struct MixCalcTable {
             Row() {
               Text(item)
                 .layoutWeight(1)
-                .fontSize(15)
+                .fontSize('15vp')
                 .fontColor('#333333')
                 .textAlign(TextAlign.Center)
             }
@@ -2196,7 +2203,7 @@ export struct MixCalcTable {
 
         Column() {
           Text(t(this.lang, 'switch.title'))
-            .fontSize(16)
+            .fontSize('16vp')
             .fontWeight(FontWeight.Bold)
             .fontColor('#000000')
             .textAlign(TextAlign.Center)
@@ -2208,12 +2215,12 @@ export struct MixCalcTable {
             Row() {
               Text(p.toString() + '%')
                 .layoutWeight(1)
-                .fontSize(15)
+                .fontSize('15vp')
                 .fontColor('#333333')
                 .textAlign(TextAlign.Center)
               Text(Math.abs(this.ratioCurrent - p / 100) < 0.0001 ? '✓' : '')
                 .width(24)
-                .fontSize(16)
+                .fontSize('16vp')
                 .fontColor('#2E7D32')
                 .textAlign(TextAlign.Center)
             }
@@ -2253,12 +2260,12 @@ export struct MixCalcTable {
         Column() {
           Row() {
             Text(this.shedListTitleText)
-              .fontSize(15)
+              .fontSize('15vp')
               .fontWeight(FontWeight.Bold)
               .fontColor('#000000')
               .layoutWeight(1)
             Text(this.shedListCountText)
-              .fontSize(12)
+              .fontSize('12vp')
               .fontColor('#666666')
           }
           .width('100%')
@@ -2270,7 +2277,7 @@ export struct MixCalcTable {
           if (this.shedListNumbers.length === 0) {
             Text(t(this.lang, 'shedList.empty'))
               .width('100%')
-              .fontSize(13)
+              .fontSize('13vp')
               .fontColor('#999999')
               .textAlign(TextAlign.Center)
               .padding({ top: 14, bottom: 14 })
@@ -2286,7 +2293,7 @@ export struct MixCalcTable {
                     .borderRadius(14)
                     .backgroundColor('#A8DDB5')
                     .fontColor('#000000')
-                    .fontSize(13)
+                    .fontSize('13vp')
                     .fontWeight(FontWeight.Bold)
                     .textAlign(TextAlign.Center)
                     .margin({ right: 2, bottom: 2 })

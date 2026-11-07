@@ -40,7 +40,7 @@ export struct CellEditor {
       .type(this.isNumber ? InputType.NUMBER_DECIMAL : InputType.Normal)
       .width(this.widthVp)
       .height(this.heightVp)
-      .fontSize(12)
+      .fontSize('12vp')
       .textAlign(TextAlign.Center)
       .padding({ left: 0, right: 0, top: 0, bottom: 0 })
       .borderRadius(0)

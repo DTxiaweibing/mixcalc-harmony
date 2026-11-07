@@ -395,7 +395,7 @@ struct Index {
   settingCell(label: string, selected: boolean, action: () => void) {
     Row() {
       Text(label)
-        .fontSize(12)
+        .fontSize('12vp')
         .fontColor(Color.White)
         .textAlign(TextAlign.Center)
     }
@@ -599,7 +599,7 @@ struct Index {
   menuRow(item: MenuItem, isLast: boolean) {
     Row() {
       Text(item.label)
-        .fontSize(18)
+        .fontSize('18vp')
         .fontColor('#333333')
         .textAlign(TextAlign.Center)
         .width('100%')
@@ -658,14 +658,14 @@ struct Index {
           })
 
           Text(this.activeBatch === 0 ? t(this.lang, 'title') : t(this.lang, 'title') + ' 02')
-            .fontSize(20)
+            .fontSize('20vp')
             .fontColor(Color.White)
             .layoutWeight(1)
             .textAlign(TextAlign.Center)
 
           // 安卓这里也是 20sp（title_text_size）
           Text(this.errorText)
-            .fontSize(20)
+            .fontSize('20vp')
             .fontColor(Color.White)
             .width('20%')
             .height(40)
@@ -742,13 +742,13 @@ struct Index {
         .width(this.menuWidth())
         .backgroundColor(Color.White)
         .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
-        .position({ x: 0, y: 40 })
+        .position({ x: 0, y: this.insetVp(this.insetTopPx) + 40 })
 
         if (this.batchMenuOpen) {
           Column() {
             Text(t(this.lang, 'batch.select'))
               .width('100%')
-              .fontSize(18)
+              .fontSize('18vp')
               .fontWeight(FontWeight.Bold)
               .fontColor('#000000')
               .textAlign(TextAlign.Center)
@@ -767,7 +767,7 @@ struct Index {
                 .height(40)
                 .borderRadius(0)
                 .backgroundColor(Color.Transparent)
-                .fontSize(15)
+                .fontSize('15vp')
                 .fontColor('#333333')
                 .onClick(() => {
                   this.switchBatch(index);
@@ -784,7 +784,7 @@ struct Index {
           .borderRadius(12)
           .clip(true)
           .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
-          .position({ x: this.menuWidth(), y: 80 })
+          .position({ x: this.menuWidth(), y: this.insetVp(this.insetTopPx) + 80 })
         }
       }
 
@@ -799,11 +799,11 @@ struct Index {
 
         Column() {
           Row() {
-            Text(t(this.lang, 'set.name')).layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
-            Text(t(this.lang, 'set.fix')).layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
-            Text(t(this.lang, 'set.unfix')).layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
-            Text(t(this.lang, 'set.hide')).layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
-            Text(t(this.lang, 'set.show')).layoutWeight(1).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+            Text(t(this.lang, 'set.name')).layoutWeight(1).fontSize('14vp').fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+            Text(t(this.lang, 'set.fix')).layoutWeight(1).fontSize('14vp').fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+            Text(t(this.lang, 'set.unfix')).layoutWeight(1).fontSize('14vp').fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+            Text(t(this.lang, 'set.hide')).layoutWeight(1).fontSize('14vp').fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
+            Text(t(this.lang, 'set.show')).layoutWeight(1).fontSize('14vp').fontWeight(FontWeight.Bold).fontColor('#333333').textAlign(TextAlign.Center)
           }
           .width('100%')
           .height(40)
@@ -814,7 +814,7 @@ struct Index {
             Row() {
               Text(t(this.lang, COLUMN_KEYS[col]))
                 .layoutWeight(1)
-                .fontSize(14)
+                .fontSize('14vp')
                 .fontColor('#333333')
                 .textAlign(TextAlign.Center)
               this.settingCell(t(this.lang, 'set.fix'), this.colFixed(col), () => {
@@ -846,7 +846,7 @@ struct Index {
             Text(t(this.lang, 'set.cancelAll'))
               .layoutWeight(1)
               .height(32)
-              .fontSize(13)
+              .fontSize('13vp')
               .fontColor(Color.White)
               .textAlign(TextAlign.Center)
               .backgroundColor('#999999')
@@ -857,7 +857,7 @@ struct Index {
             Text(t(this.lang, 'set.unfixAll'))
               .layoutWeight(1)
               .height(32)
-              .fontSize(13)
+              .fontSize('13vp')
               .fontColor(Color.White)
               .textAlign(TextAlign.Center)
               .backgroundColor('#2D8C42')
@@ -869,7 +869,7 @@ struct Index {
             Text(t(this.lang, 'set.showAll'))
               .layoutWeight(1)
               .height(32)
-              .fontSize(13)
+              .fontSize('13vp')
               .fontColor(Color.White)
               .textAlign(TextAlign.Center)
               .backgroundColor('#2D8C42')
@@ -881,7 +881,7 @@ struct Index {
             Text(t(this.lang, 'set.confirm'))
               .layoutWeight(1)
               .height(32)
-              .fontSize(13)
+              .fontSize('13vp')
               .fontColor(Color.White)
               .textAlign(TextAlign.Center)
               .backgroundColor('#2D8C42')
@@ -913,7 +913,7 @@ struct Index {
 
           Column() {
             Text(t(this.lang, 'lang.title'))
-              .fontSize(18)
+              .fontSize('18vp')
               .fontWeight(FontWeight.Bold)
               .fontColor('#000000')
               .textAlign(TextAlign.Center)
@@ -926,7 +926,7 @@ struct Index {
               : t(this.lang, 'lang.system'))
               .width('100%')
               .height(44)
-              .fontSize(16)
+              .fontSize('16vp')
               .fontColor('#333333')
               .textAlign(TextAlign.Center)
               .onClick(() => {
@@ -940,7 +940,7 @@ struct Index {
               : t(this.lang, 'lang.zh'))
               .width('100%')
               .height(44)
-              .fontSize(16)
+              .fontSize('16vp')
               .fontColor('#333333')
               .textAlign(TextAlign.Center)
               .onClick(() => {
@@ -954,7 +954,7 @@ struct Index {
               : t(this.lang, 'lang.en'))
               .width('100%')
               .height(44)
-              .fontSize(16)
+              .fontSize('16vp')
               .fontColor('#333333')
               .textAlign(TextAlign.Center)
               .onClick(() => {
@@ -966,7 +966,7 @@ struct Index {
             Text(t(this.lang, 'btn.cancel'))
               .width('100%')
               .height(44)
-              .fontSize(16)
+              .fontSize('16vp')
               .fontColor('#666666')
               .textAlign(TextAlign.Center)
               .onClick(() => {
@@ -992,7 +992,7 @@ struct Index {
 
           Column() {
             Text(this.privacyTitle)
-              .fontSize(18)
+              .fontSize('18vp')
               .fontWeight(FontWeight.Bold)
               .fontColor('#000000')
               .width('100%')
@@ -1006,12 +1006,12 @@ struct Index {
                 ForEach(this.privacyTokens(), (tok: PrivacyToken, idx: number) => {
                   if (tok.link === '') {
                     Text(tok.text)
-                      .fontSize(13)
+                      .fontSize('13vp')
                       .fontColor('#333333')
                       .lineHeight(20)
                   } else {
                     Text(tok.text)
-                      .fontSize(13)
+                      .fontSize('13vp')
                       .fontColor('#2D8C42')
                       .lineHeight(20)
                       .onClick(() => {
@@ -1032,7 +1032,7 @@ struct Index {
               Text(t(this.lang, 'privacy.disagree'))
                 .layoutWeight(1)
                 .height(48)
-                .fontSize(15)
+                .fontSize('15vp')
                 .fontWeight(FontWeight.Bold)
                 .fontColor('#D32F2F')
                 .textAlign(TextAlign.Center)
@@ -1045,7 +1045,7 @@ struct Index {
               Text(t(this.lang, 'privacy.agree'))
                 .layoutWeight(1)
                 .height(48)
-                .fontSize(15)
+                .fontSize('15vp')
                 .fontWeight(FontWeight.Bold)
                 .fontColor('#2D8C42')
                 .textAlign(TextAlign.Center)
