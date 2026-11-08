@@ -1,5 +1,6 @@
 import { FeedData } from '../model/FeedData';
 import { ownedCounts, ownedSets, findOverLimit, MAX_SHED_NUMBER } from '../model/ShedCoverage';
+import { settleZeroRowData } from '../model/RowSettlement';
 import { t } from '../common/Strings';
 import { promptAction } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
@@ -679,6 +680,12 @@ export struct MixCalcTable {
   }
 
   private cellText(row: FeedData, column: number, rowIndex: number): string {
+    // 棚数为 0：料列一律不显示数据（背景仍由 cellFill 置灰），
+    // 平均/水/称料也留白；底层数据还在，等失焦结算时才真正清掉
+    if (row.shedCount <= 0
+      && (column === 3 || column === 9 || (column >= 4 && column <= 8))) {
+      return '';
+    }
     switch (column) {
       case 0: return (rowIndex + 1).toString();
       case 1: return row.shedNumber;
@@ -838,6 +845,14 @@ export struct MixCalcTable {
     row.isAverageManuallyModified = false;
   }
 
+  // 失焦结算：棚数为 0 的行当新行处理（棚号保留，只清料/水/平均/称料）
+  private settleZeroRows(): void {
+    if (settleZeroRowData(this.rows)) {
+      this.version = this.version + 1;
+      this.onChanged();
+    }
+  }
+
   private sumBelowFirst(): number {
     let sum: number = 0;
     for (let i = 1; i < this.rows.length; i++) {
@@ -903,9 +918,6 @@ export struct MixCalcTable {
         // 改棚号本质是改棚数：平均保持不变，料量重算
         row.setAverageManually(oldAverage, this.fermentedInAverage);
       }
-      if (value.length === 0) {
-        this.clearRowData(row, true);
-      }
     } else if (col === 3) {
       row.setAverageManually(number, this.fermentedInAverage);
     } else {
@@ -926,24 +938,13 @@ export struct MixCalcTable {
       row.switchRatio = 0;
     }
 
-    // 超上限的输入整段不计棚数，这时别顺手把这一行已有的料清掉，
-    // 等用户把棚号改回来，料量会自动接着算
-    if (over === 0 && row.shedCount <= 0) {
-      row.fermented = 0;
-      row.powder = 0;
-      row.feed03 = 0;
-      row.feed05 = 0;
-      row.feed10 = 0;
-      row.water = 0;
-      row.weighed = 0;
-      row.average = 0;
-      row.isAverageManuallyModified = false;
-      row.switchRatio = 0;
-    }
-
-    // 所有行一视同仁
-    row.updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+    // 编辑途中棚数变成 0 只隐藏显示，不动底层数据：
+    // 别把用户已经填好的料清掉，等失焦结算时再按“新行”处理
+    // 先打点覆盖算出权威棚数（棚数真的变了才按旧平均重算料量），再刷新派生值：
+    // 顺序反了会拿“本行棚号自己数的个数”当权威值，和别的行重叠时
+    // 每敲一个键都会把料量按错误棚数改一遍（手动填料被改写）
     this.recomputeFirstRow();
+    row.updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
     this.version = this.version + 1;
     if (persist) {
       this.onChanged();
@@ -957,20 +958,21 @@ export struct MixCalcTable {
   }
 
   // 收尾：只有真改过才提交落盘；只点一下没输入不写脏数据（安卓 dirty 标记）
+  // 编辑结束＝失去焦点：这里做一次结算，棚数仍为 0 的行彻底清空
   private finishEdit(): void {
-    if (this.editingRow < 0 || this.editingCol < 0) {
-      return;
+    if (this.editingRow >= 0 && this.editingCol >= 0) {
+      const text: string = this.editingText;
+      const wasDirty: boolean = this.editDirty;
+      this.editingRow = -1;
+      this.editingCol = -1;
+      this.editingSeed = '';
+      this.editDirty = false;
+      this.stopCaret();
+      if (wasDirty) {
+        this.applyEdit(text, true);
+      }
     }
-    const text: string = this.editingText;
-    const wasDirty: boolean = this.editDirty;
-    this.editingRow = -1;
-    this.editingCol = -1;
-    this.editingSeed = '';
-    this.editDirty = false;
-    this.stopCaret();
-    if (wasDirty) {
-      this.applyEdit(text, true);
-    }
+    this.settleZeroRows();
   }
 
   // 数字键盘（自己画，不用系统输入法）：回车键不再由输入法处理，
@@ -1145,6 +1147,8 @@ export struct MixCalcTable {
         // 这列在下面某行不能编辑，就停在原处（跟安卓回车到头一样）
         return;
       }
+      // 真正换格才结算：上面提前 return 时编辑还留在原格，不能清数据
+      this.settleZeroRows();
       this.moveEditor(row, col);
       return;
     }
@@ -1194,6 +1198,7 @@ export struct MixCalcTable {
             return;
           }
         }
+        this.settleZeroRows();
         this.moveEditor(row, target);
         return;
       }
@@ -1432,12 +1437,10 @@ export struct MixCalcTable {
     if (row < 0 || row >= this.rows.length) {
       return;
     }
-    // 「棚数」是按钮：点开看本行实际的棚号列表，不进编辑、不弹键盘
+    // 棚数是按钮：点开看本行实际的棚号列表，不进编辑、不弹键盘
     if (column === 2) {
-      if (this.editingRow >= 0 && this.editDirty) {
-        this.applyEdit(this.editingText, true);
-      }
-      this.editDirty = false;
+      // 点按钮也是离开当前编辑格：提交并结算
+      this.finishEdit();
       this.showShedList(row);
       return;
     }
@@ -1472,6 +1475,8 @@ export struct MixCalcTable {
       this.applyEdit(this.editingText, true);
     }
     this.editDirty = false;
+    // 换格 = 上一格失焦：先结算棚数为 0 的行，再打开新格
+    this.settleZeroRows();
     this.overLimitWarned = false;
     this.editRow = row;
     this.editCol = column;
@@ -1809,6 +1814,8 @@ export struct MixCalcTable {
       this.rows[i].updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
     }
     this.recomputeFirstRow();
+    // 载入后清一次历史脏数据：棚数为 0 却还留着料的，按新行处理
+    this.settleZeroRows();
   }
 
   @Builder
@@ -2069,23 +2076,33 @@ export struct MixCalcTable {
 
         // 自己的「下一行」按钮：相当于回车向下，同一列下一行
         // 只在键盘弹起时显示（键盘收起就跟着隐藏，与安卓一致）
+        // 自绘：Row 的 alignItems(VerticalAlign.Center) 负责上下居中，
+        // 不再依赖 Text 固定高度时的字体基线（否则文字看着会偏下）；
+        // 小三角也用 Polygon 画，避免 ▾ 字符自带基线再次把文字顶偏。
         if (this.kbVisible) {
-          Text(t(this.lang, 'pad.nextRow') + ' ▾')
-            .fontSize('13vp')
-            .fontColor(Color.White)
-            .textAlign(TextAlign.Center)
-            .width(76)
-            .height(28)
-            .backgroundColor('#2D8C42')
-            .borderRadius(14)
-            .position({
-              x: Math.max(4, this.viewW - 84),
-              y: this.hh() + Math.max(0, this.viewH - 34)
-            })
-            .zIndex(9)
-            .onClick(() => {
-              this.nextRowDown();
-            })
+          Row({ space: 4 }) {
+            Text(t(this.lang, 'pad.nextRow'))
+              .fontSize('13vp')
+              .fontColor(Color.White)
+              .maxLines(1)
+            Polygon({ width: 7, height: 5 })
+              .points([[0, 0], [7, 0], [3.5, 5]])
+              .fill(Color.White)
+          }
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .width(84)
+          .height(30)
+          .backgroundColor('#2D8C42')
+          .borderRadius(15)
+          .position({
+            x: Math.max(4, this.viewW - 92),
+            y: this.hh() + Math.max(0, this.viewH - 38)
+          })
+          .zIndex(9)
+          .onClick(() => {
+            this.nextRowDown();
+          })
         }
       }
 

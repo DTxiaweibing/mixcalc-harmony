@@ -5,6 +5,7 @@ import { promptAction, router, window, KeyboardAvoidMode } from '@kit.ArkUI';
 import { Batch } from '../model/Batch';
 import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
+import { settleZeroRowData } from '../model/RowSettlement';
 import { t } from '../common/Strings';
 import { LAYOUT_COLUMN_IDS, fillsAllColumns, isTabletWidth } from '../common/LayoutRules';
 import { applyHomeBars, STATUS_BAR_COLOR, TABLE_BOTTOM_COLOR, toVp } from '../common/WindowChrome';
@@ -374,6 +375,8 @@ struct Index {
     if (index === this.activeBatch || index < 0 || index >= this.batches.length) {
       return;
     }
+    // 切批次前把当前批次里棚数为 0 的行结算掉，再落盘
+    settleZeroRowData(this.currentBatch().rows);
     this.saveAll();
     this.activeBatch = index;
     this.syncBatchSettings();
@@ -592,6 +595,8 @@ struct Index {
   }
 
   onPageHide(): void {
+    // 退出/切后台：棚数仍为 0 的行彻底清空，再保存
+    settleZeroRowData(this.currentBatch().rows);
     this.saveAll();
   }
 

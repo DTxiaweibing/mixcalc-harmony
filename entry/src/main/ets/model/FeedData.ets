@@ -248,7 +248,11 @@ export class FeedData {
     if (this.countNonFermentedFeeds() !== 2) {
       this.switchRatio = 0;
     }
-    this.calculateShedCount();
+    // 这里不要重算棚数：棚号的解析值只是“本行自己数的个数”，
+    // 跨行重叠时真正生效的是表格层打点覆盖后的棚数。若在这里先按本行
+    // 解析值改写 shedCount，覆盖逻辑就会误以为“棚数变了”，把用户刚输入
+    // 的料量按错误的棚数重算一遍（表现为手动填料被改写）。
+    // shedNumber 变更一律走 setShedNumber()，那里已经算过本行个数。
     this.recalculateDerivedOnly(waterPercentage, fermentedInWater, fermentedInAverage);
   }
 }
