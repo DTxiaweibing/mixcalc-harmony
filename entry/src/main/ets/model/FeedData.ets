@@ -7,6 +7,9 @@ const NF_FEED10: number = 3;
 
 export class FeedData {
   shedNumber: string = '';
+  // 派生显示文本：打点覆盖后这行「实际拥有」的棚号，纯派生、不落盘；
+  // 空串表示还没算过，显示回落到 shedNumber。
+  shedDisplay: string = '';
   shedCount: number = 0;
   average: number = 0;
   fermented: number = 0;
@@ -49,9 +52,12 @@ export class FeedData {
     this.weighed = obj['weighed'] as number;
     this.switchRatio = obj['switchRatio'] as number;
     this.isAverageManuallyModified = obj['isAverageManuallyModified'] as boolean;
+    // R4：载入旧数据后显示态失效，等首次打点覆盖重算（不落盘，也不串旧快照）
+    this.shedDisplay = '';
   }
   setShedNumber(value: string): void {
     this.shedNumber = value;
+    this.shedDisplay = '';
     this.calculateShedCount();
   }
 
@@ -64,6 +70,43 @@ export class FeedData {
     // 同一行里重复写的棚号只算一次；跨行重叠由表格层的打点覆盖处理
     const numbers: number[] = parseShedNumbers(text);
     this.shedCount = numbers.length;
+  }
+
+  getShedDisplay(): string {
+    if (this.shedDisplay.length === 0) {
+      return this.shedNumber;
+    }
+    return this.shedDisplay;
+  }
+
+  setShedDisplay(value: string): void {
+    this.shedDisplay = value;
+  }
+
+  // 表格层打点覆盖后的权威棚数直写：只写棚数，平均/料量等派生值等统一重算再刷
+  setShedCountDirectly(count: number): void {
+    this.shedCount = count;
+  }
+
+  // 失焦结算用：只清派生字段，棚号声明与派生显示都保留
+  clearDerived(): void {
+    this.average = 0;
+    this.fermented = 0;
+    this.powder = 0;
+    this.feed03 = 0;
+    this.feed05 = 0;
+    this.feed10 = 0;
+    this.water = 0;
+    this.weighed = 0;
+    this.switchRatio = 0;
+    this.isAverageManuallyModified = false;
+  }
+
+  hasRowData(): boolean {
+    return this.average !== 0 || this.fermented !== 0 || this.powder !== 0
+      || this.feed03 !== 0 || this.feed05 !== 0 || this.feed10 !== 0
+      || this.water !== 0 || this.weighed !== 0
+      || this.switchRatio !== 0 || this.isAverageManuallyModified;
   }
 
   private nonFermentedSum(): number {
