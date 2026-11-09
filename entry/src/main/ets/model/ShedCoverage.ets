@@ -1,3 +1,5 @@
+import { compressNumbers } from './ShedRange';
+
 /**
  * 棚号解析 + 打点覆盖。
  *
@@ -173,4 +175,35 @@ export function unionCount(texts: string[]): number {
     }
   }
   return owner.size;
+}
+
+/**
+ * 按“实际归属”校正每行棚号文本。
+ *
+ * 一行文本里的号码被后面的行占走后，这行的有效棚数变小了，但文本还写着原来的范围，
+ * 看到的号码和参与算料的号码对不上。比如第 1 行写 1-40、第 2 行写 1-15，
+ * 第 1 行只剩 16-40，文本就该显示 16-40。
+ *
+ * 已有号码一个没被别人占走的行原样返回（保留用户自己的写法，如 24-40 1-20 不会被重排）；
+ * 棚数为 0 的行也原样返回——它马上要被整行回收，清成空白会留下一个中间空洞。
+ *
+ * @returns 与入参等长的文本数组
+ */
+export function renormalize(texts: string[]): string[] {
+  const out: string[] = [];
+  const owned: number[][] = ownedSets(texts);
+  for (let i = 0; i < texts.length; i++) {
+    const raw: string = texts[i];
+    // 先判空串/空值：空行不 trim、不重排，原样留白交给结算时的行回收
+    const original: string = raw === undefined || raw.length === 0 ? '' : raw.trim();
+    const mine: number[] = owned[i];
+    // owned 一定是自己文本的子集，数量不等就说明有号被后面的行占走了；
+    // mine 为空（整行被覆盖）时仍返回原文，避免表中间留洞
+    if (mine.length > 0 && mine.length !== parseShedNumbers(original).length) {
+      out.push(compressNumbers(mine));
+    } else {
+      out.push(original);
+    }
+  }
+  return out;
 }
