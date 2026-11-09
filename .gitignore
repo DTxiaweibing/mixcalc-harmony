@@ -26,3 +26,6 @@ build-profile.json5.bak
 /copyright/build
 /copyright/output
 __pycache__/
+
+# 模型层测试编译产物（scripts/run-model-tests.mjs 自动生成）
+scripts/.model-test-build/
