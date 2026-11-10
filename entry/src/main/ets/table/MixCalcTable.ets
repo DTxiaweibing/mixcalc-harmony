@@ -3,7 +3,7 @@ import { ownedSets, findOverLimit, MAX_SHED_NUMBER, renormalize } from '../model
 import { settleZeroRowData, settleRows, RowSettleResult } from '../model/RowSettlement';
 import { recompute, ShedDraftResult } from '../model/ShedDraft';
 import { render as renderShedDisplay } from '../model/ShedDisplay';
-import { transfer, remove as removeShedNumbers, pointlessWholeRowMove, normalize as normalizeShedNumbers } from '../model/ShedText';
+import { transfer, giveDown, remove as removeShedNumbers, pointlessWholeRowMove, normalize as normalizeShedNumbers } from '../model/ShedText';
 import { ShedDeletePlan } from '../model/ShedDeletePlan';
 import { t } from '../common/Strings';
 import { promptAction } from '@kit.ArkUI';
@@ -1790,10 +1790,13 @@ export struct MixCalcTable {
       return;
     }
 
-    // 两边文本都按“转移后的实际号码”重排重写（升序、连号合成区间）。
-    // 没有任何“落在目标范围内就跳过”的暗规则——文本里的号就是这行认领的号，
-    // 棚数归谁由打点覆盖（后行优先）说了算。
-    const moved: string[] = transfer(oldSource, oldTarget, numbers);
+    // 文本改写分两个方向，差别只在「来源行要不要留原文」：
+    //   往下转（来源在上）：后行优先，这批号本来就归目标行，来源行原文一个字都不用改——
+    //     原文留在来源行就是「这些号从哪来」的账，目标行以后清空/删除时号能自动退回去。
+    //   往上转（来源在下）：来源行必须真的松手，否则它还在下面压着，号根本没走。
+    const moved: string[] = targetRow > sourceRow
+      ? giveDown(oldSource, oldTarget, numbers)
+      : transfer(oldSource, oldTarget, numbers);
 
     // 先把池子清掉，后面可能弹提示，别让池子停在半路
     this.clearPendingTransfer();
@@ -1801,10 +1804,9 @@ export struct MixCalcTable {
     this.commitShedText(sourceRow, moved[0]);
     this.commitShedText(targetRow, moved[1]);
 
-    // 重排：把两行文本重写成各自“实际拥有”的号码（覆盖之后的真相），
-    // 别的行后来居上抢走的号不再挂在文本里，后续转移不再被幽灵号干扰
-    this.rewriteToOwned(sourceRow);
-    this.rewriteToOwned(targetRow);
+    // 注意：这里绝不能把两行文本重写成「只留实际占有的号」（Android 的 rewriteToOwned）。
+    // 那样会把来源行里「被下行占走的号」从声明中抹掉，等于销毁来路账本——
+    // 目标行日后一清空，这些号就成了「没来路」，会被 ShedDeletePlan 判成真删而彻底消失。
     this.forceRecomputeRows([sourceRow, targetRow]);
 
     // 一次算齐所有该回收的行：被转空的两行 + 别的死行（幽灵号清掉后露出来的），
@@ -1823,19 +1825,6 @@ export struct MixCalcTable {
       }
     }
     this.settleRowsAndPad(emptied);
-  }
-
-  // 重排：把一行的棚号文本重写成它“实际拥有”的号码（打点覆盖、后行优先之后的真相），
-  // 升序、连号合成区间。转移 / 删除之后调用，保证文本永远和棚数对得上。
-  private rewriteToOwned(rowIndex: number): void {
-    if (rowIndex < 0 || rowIndex >= this.rows.length) {
-      return;
-    }
-    const data: FeedData = this.rows[rowIndex];
-    const owned: string = normalizeShedNumbers(this.shedNumbersOf(rowIndex));
-    if (owned !== data.shedNumber.trim()) {
-      this.commitShedText(rowIndex, owned);
-    }
   }
 
   // 一次动好几行的操作（转入）收尾用：先跑打点覆盖，再把参与的行强制重算一遍派生值

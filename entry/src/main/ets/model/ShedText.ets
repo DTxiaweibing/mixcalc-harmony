@@ -46,6 +46,30 @@ export function transfer(sourceText: string, targetText: string, numbers: number
 }
 
 /**
+ * 往**下方**行转：返回 [来源文本, 目标文本]。
+ *
+ * 来源行在上，后行优先，这批号本来就会归目标行，所以来源行一个字都不用改——
+ * **原文留在来源行，等于把「这些号是从哪来的」记在账上**：目标行以后把号清掉/删掉，
+ * 打点覆盖会重新数到来源行还申明着，号自动退回去继续算料。
+ *
+ * 若像 Android 那样把来源行重写成「只留实际占有的号」，这份来路就被抹掉了，
+ * 目标行一清空，这些号就变成「没来路」被彻底删除。
+ */
+export function giveDown(sourceText: string, targetText: string, numbers: number[]): string[] {
+  const target: number[] = parseShedNumbers(targetText);
+  for (let i: number = 0; i < numbers.length; i++) {
+    const n: number = numbers[i];
+    if (n > 0) {
+      target.push(n);
+    }
+  }
+  const result: string[] = [];
+  result.push(sourceText.trim());
+  result.push(compressNumbers(target));
+  return result;
+}
+
+/**
  * 整行的号全部转给一个空行：等于只是把整行往下挪一格，屏幕闪一下却什么都没变，
  * 这种转移直接不让做。目标行不是空的（真合并）才放行。
  */

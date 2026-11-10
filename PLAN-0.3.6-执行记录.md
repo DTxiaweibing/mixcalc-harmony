@@ -1,0 +1,128 @@
+# 鸿蒙版对齐安卓 0.3.5 → 0.3.20 执行记录
+
+> 目标：读取 `D:\mixcalc-lab`（安卓）从 0.3.5 到当前（0.3.20 / versionCode 23）的全部进化，
+> 应用到 `D:\mixcalc-harmony`（鸿蒙）。按小任务逐步改代码、逐步跑测试、逐步记录，
+> 最后用 `D:\command-line-tools` 工具链打调试包，经 `hdc` 推送到手机 `192.168.10.103:42085`。
+>
+> 业务准绳：`D:\mixcalc-lab\docs\棚号与表格逻辑-0.3.6至0.3.19完整改动与移植说明.md`
+> 执行计划：`docs/superpowers/plans/2026-11-09-harmony-shed-ledger-0.3.6.md`
+> 签名材料：`D:\mixcalc-sign`（发布证书 / p7b / p12，release 包用）
+
+## 起点核对（2026-11-10）
+
+| 项 | 状态 |
+|---|---|
+| 安卓当前版本 | 0.3.20 / versionCode 23，release 包 `dist/mixcalc-0.3.6-shed-ledger.apk` |
+| 鸿蒙当前版本 | 0.3.6 / versionCode 1000306（`AppScope/app.json5`），功能水平≈安卓 0.3.7 |
+| 鸿蒙缺口 | renormalize、ShedDisplay 两行折叠、ShedDraft 快照、ShedText 转移/删除、ShedDeletePlan、行回收、气泡选中/菜单/转出转入/删除、编辑快照生命周期、棚号列 72vp |
+| 版本规则 | 0.3.9 / 0.3.12 / 0.3.14 的旧规则已被 0.3.20 取代，按移植说明第 3、4 章实现 |
+| 任务 0（测试跑车） | 已完成：`scripts/run-model-tests.mjs` + `scripts/model-tests/feed-data.test.mjs`，`node scripts/run-model-tests.mjs` → `✓ 1 assertions` |
+| 工具链 | `D:\command-line-tools\command-line-tools`（hvigorw / hdc / SDK tsc） |
+| 手机 | `hdc tconn 192.168.10.103:42085` → `Connect OK` |
+
+## 逐步记录
+
+### 任务 0 · 环境与测试跑车（已完成，上一轮遗留）
+- `node -v` → v22.22.2；`node scripts/run-model-tests.mjs` → 编译 3 个模型文件，`✓ 1 assertions`，退出码 0。
+- 工作区未提交：`scripts/run-model-tests.mjs`、`scripts/model-tests/feed-data.test.mjs`、`.gitignore`（追加 `scripts/.model-test-build/`）。
+- 决定：继承已有 15 步计划，从任务 1 开始；每步「改码 → 跑测试 → 编译 → 提交 → 记录」。
+
+### 任务 1 · ShedRange + ShedText（纯函数）
+- 新增 `model/ShedRange.ets`：`compressNumbers(number[])`，升序去重、连续≥3 才写区间、空格分隔。
+- 新增 `model/ShedText.ets`：`normalize` / `transfer` / `pointlessWholeRowMove` / `remove`；`remove` 能拆区间（`1-40` 去 5 → `1-4 6-40`），一个都没删到时原样返回。
+- 新增 `scripts/model-tests/shed-text.test.mjs`：66 个断言点，含 ShedTextTest 全量 + ShedTransferTest 端到端流程。
+- 提交 `251a01e`。
+
+### 任务 2 · ShedCoverage.renormalize
+- `ShedCoverage.ets` 追加 `renormalize(texts)`：只重写「被占走部分号码」的行，`owned` 为空时原样保留（0 棚行交给行回收）。
+- 新增 `shed-coverage.test.mjs`（10 个断言点，含幂等与空串）。
+- 提交 `9c29a9a`。
+
+### 任务 3 · ShedDisplay 两行极简折叠
+- 新增 `model/ShedDisplay.ets`：`render(rawText)`，逐行直译 Java；A-1/A-2/B-1/B-2 四分支、9 字符/行、区间不切断、唯一区间只露一次。
+- 新增 `shed-display.test.mjs`（8 个断言点，覆盖 12 组期望 + 行长/行数约束）。
+- 提交 `bf47682`。
+
+### 任务 4 · ShedDraft 快照重推
+- 新增 `model/ShedDraft.ets`：`recompute(snapshot, editingRow, typedText)`；快照深拷贝、每字符从快照重推、编辑行保留原文。
+- 新增 `shed-draft.test.mjs`（20 个断言点，逐字符前缀断言 + 半成品回滚）。
+- 提交 `a3be105`。
+
+### 任务 5 · ShedDeletePlan
+- 新增 `model/ShedDeletePlan.ets`：`of(declaredTexts, row, targets)` 只看上方行，分 `fallback` / `permanent` 两桶。
+- 新增 `shed-delete-plan.test.mjs`（23 个断言点，含区间展开、下方行不算来路）。
+- 提交 `c2ac7f0`。
+
+### 任务 6 · FeedData 派生显示与棚数直写
+- `FeedData.ets`：新增 `shedDisplay`（不落盘）、`getShedDisplay` / `setShedDisplay` / `setShedCountDirectly` / `clearDerived` / `hasRowData`；`setShedNumber` 清显示；`fromJson` 清显示（R4）。
+- `feed-data.test.mjs` 替换为 30 个断言点，保留冒烟断言与 `loadModel` helper。
+- 提交 `9f00d09`。
+
+### 任务 7 · RowSettlement 行回收与结算
+- `RowSettlement.ets`：新增 `recycleDeadRows`（按申明文本 `ownedCounts` 重算、一次删完、纯空行不删）、`settleRows`（先回收再兜底清、底部补空行）、`RowSettleResult`；保留 `settleZeroRowData`。
+- 新增 `row-settlement.test.mjs`（73 个断言点，含「三行被同一行覆盖且缓存滞后一次删完」）。
+- 提交 `2e1d438`。
+
+### 模型层阶段验收（任务 1-7）
+- `node scripts/run-model-tests.mjs` → 编译 8 个模型文件，**✓ 328 assertions**，退出码 0。
+- `hvigorw assembleHap -p product=default -p buildMode=debug --no-daemon` → **BUILD SUCCESSFUL in 2 min 46 s**（ArkTS 严格模式通过，仅既有 deprecated 警告）。
+- 提交序列：`ca09556` → `251a01e` → `9c29a9a` → `bf47682` → `a3be105` → `c2ac7f0` → `9f00d09` → `2e1d438`。
+
+### 任务 8 · 棚号操作中英文案
+- `Strings.ets` ZH/EN 各加 12 个 key：`shed.more` / `shed.selectAll` / `shed.invert` / `shed.delete` / `shed.transferOut` / `shed.transferIn` / `shed.transferWholeToBlank` / `shed.deleteTitle` / `shed.deleteMsg` / `shed.deleteMsgFallback` / `shed.deleteMsgPermanent` / `shed.deleteMsgMixed`。
+- 提交 `0cbb134`。
+
+### 任务 9 · 表格打点覆盖两层 + 棚号编辑快照
+- `MixCalcTable.ets`：
+  - 新增 `snapshotShedTexts()`（取 `shedNumber` 声明文本）、`beginShedEdit()` / `endShedEdit()`，维护 `shedEditSnapshot` / `shedEditRow` / `shedEditActive`。
+  - `applyShedCoverage()` 改为两层：**声明永不改写**，只写 `setShedDisplay()` 与 `setShedCountDirectly()`；`oldCount` 在写显示之前取出，棚数变了才按「平均 × 新棚数」重算料量。
+  - 编辑中走 `recompute(快照, 编辑行, 当前输入)` 逐帧重推；非编辑态走 `renormalize + ownedSets`。
+  - `settleZeroRows()` → `settleRowsAndPad()`，接 `settleRows`（回收 + 兜底清 + 补空行）。
+- 提交 `4673e4e`。
+
+### 任务 10 · 棚号列两行折叠 + 固定字号 + 72vp
+- `LayoutRules.ets`：`LAYOUT_WIDTHS[1]` 60 → **72**。
+- `MixCalcTable.ets`：`cellText()` 棚号列走 `renderShedDisplay()`（`\n` 分行），`cellView()` 棚号列 15vp 字号 + `lineHeight(18)` + `maxLines(2)` + Clip。
+- 提交 `4673e4e`（与任务 9 同提交）。
+
+### 编译验收（任务 8-10）
+- 首次编译失败：`Module '"../model/ShedDraft"' has no exported member 'ShedDraft'` —— 按函数式导出误写成类调用，已改为 `import { recompute, ShedDraftResult }` + `recompute(...)`。
+- 修正后 `hvigorw assembleHap -p product=default -p buildMode=debug --no-daemon` → **BUILD SUCCESSFUL in 1 min 57 s**。
+
+### 任务 11 · 棚号气泡选中 / ⋮ 菜单 / 转出转入
+- 气泡打开条件对齐安卓：`numbers` 非空 **或** 本行有棚号文本 **或** 有待转池可转入（空行也能当转入目标）。
+- 号码块点选：绿底黑字（`#A8DDB5`/`#000000`）↔ 蓝底白字（`#2F6FED`/`#FFFFFF`）；ForEach key 带上选中位，保证换色即时生效。
+- 表头新增 `⋮`（48×40 点击区）：全选 / 反选 / 删除 / 转出 / 转入；菜单右边缘对齐气泡右边缘，下方放不下就翻到气泡上方。
+- 待转池：转出只记号码 + 来源行，**来源行数据一个字不改**；气泡自行关掉（不走遮罩点击，故无需 keepPending 标记）。
+  作废时机＝遮罩点击关窗、点到别的格子、删除、行结算、视口尺寸变化。
+- 转入：`transfer(来源原文, 目标原文, 号码)` 重写两边文本 → `rewriteToOwned` 按实际归属重排 → `forceRecomputeRows` 覆盖并重算派生值 → 两行一起交 `settleRowsAndPad` 回收。
+  防呆 `pointlessWholeRowMove`：整行转给空行等于只挪一格，直接拦下并提示 `shed.transferWholeToBlank`。
+- 新增 `commitShedText(row, text)`（对齐安卓 `commitCell(row,"shed_number",…)`）：改棚号 → 保持平均 → 重算料量 → 覆盖 → 落盘。
+- 提交 `ab25dc2`。
+
+### 任务 12 · 删除确认 / 只动本行 / 行回收
+- `confirmDeleteShedNumbers`：`ShedDeletePlan.of(声明文本, 行, 目标)` 分 fallback / permanent 两桶，生成三类正文（全退回 / 全真删 / 混合），真删的号码用 `normalize()` 压成区间点名，超 80 字符只列前 12 个。
+- `applyDeleteShedNumbers`：只把目标号码从**本行**申明里 `remove`（区间该拆就拆），绝不从全表每行删。
+- 号删光且棚数 ≤ 0 → 行号进 `emptiedByUser` → `settleRowsAndPad` 一次删完、下面行上顶、底部补空行。
+- 与任务 11 同提交 `ab25dc2`。
+- 回归：`node scripts/run-model-tests.mjs` → **✓ 328 assertions**；`assembleHap` → **BUILD SUCCESSFUL in 2 min 1 s**。
+
+### 修补 · 转入后的「来路」不能丢（用户提出）
+- 用户质疑：来源行被转入/转出改过以后，后来的行想退回还有没有可能？会不会因为没快照就直接被删？
+- 用模型代码跑探针验证（`1-40` 上、`1-15` 下，把 `20-24` 往下转）：
+  - **安卓做法**（转完 `rewriteToOwned` 把两行声明裁成「只留实际占有的号」）：来源行从 `1-40` 变成 `16-19 25-40`，
+    `1-15` 的申明记忆被抹掉；此后目标行清空，`1-15` **不会退回，直接被判成真删**。用户的怀疑成立。
+  - **不裁剪**：来源行仍是 `1-40`，目标行清空后 `1-15` 与 `20-24` 原样退回。
+- 结论：退回从来不靠快照——`ownedSets` 每帧按「还有哪一行在申明这个号」现算，**声明文本本身就是来路账本**。
+  要保来路，只要不主动把声明裁掉。
+- 改法：
+  - 新增 `ShedText.giveDown(sourceText, targetText, numbers)`：**往下转**时来源行原文一字不动，只把号码并入目标行
+    （后行优先，号本来就归下行，来源行不用让）。
+  - **往上转**仍用 `transfer`：来源行在下面，不真松手号根本没走。
+  - 删除 `MixCalcTable.rewriteToOwned()` 及其两处调用，并在代码里写明为什么不能裁。
+- 新增 `scripts/model-tests/shed-transfer-provenance.test.mjs`（16 个断言点）：锁住「往下转后清空目标行，号退回来源行」
+  「删掉来源行申明过的号 → 判退回；删掉没人申明过的号 → 判真删」「往上转来源行必须让出」，并把
+  「重写成 owned 会丢来路」作为反面断言写进测试，防止以后有人"优化"回去。
+- 回归：**✓ 344 assertions**；`assembleHap` → **BUILD SUCCESSFUL in 2 min 13 s**。
+- 版本号维持 `0.3.6 / 1000306` 不动（市场当前是 0.3.5，0.3.6 尚未发布，发布时就用 0.3.6）。
+
