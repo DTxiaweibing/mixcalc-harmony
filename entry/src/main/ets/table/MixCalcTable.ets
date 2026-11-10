@@ -640,12 +640,13 @@ export struct MixCalcTable {
     return HEAD_H;
   }
 
-  // 字号固定：用 vp 而不是 fp，不随系统字体大小缩放
+  // 字号固定：用 vp 而不是 fp，不随系统字体大小缩放。
+  // 正文 16vp：与已发布安卓 CellStyle 的 16sp 对齐（棚号列、表头也一并对齐）。
   private fs(): string {
-    return '15vp';
+    return '16vp';
   }
 
-  // 表头单独一号：比正文小 1vp
+  // 表头比正文小 2vp：与安卓「表头 14sp / 正文 16sp」一致
   private fsHeader(): string {
     return '14vp';
   }

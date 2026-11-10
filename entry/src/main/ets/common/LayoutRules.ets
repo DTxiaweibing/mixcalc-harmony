@@ -31,8 +31,15 @@ export function fillsAllColumns(visible: boolean[], widthVp: number): boolean {
       return false;
     }
   }
-  // 平板布局（>=600vp）会把可见列整体缩放到窗宽，全可见时必然铺满；
-  // 手机布局是固定列宽总和（612vp），只有窗口宽到放得下才算铺满，否则还在横向滚动。
+  // 平板 / 宽窗口布局（>=600vp，含横屏平板）会把可见列整体缩放到窗宽，
+  // 全可见时必然铺满，与固定列宽总和（612vp）无关。
+  // 判据与 MixCalcTable.isTabletMode() 同源（同一个 isTabletWidth / TABLET_MIN_WIDTH），
+  // 依据的是鸿蒙自身的缩放逻辑，不是照搬安卓的竖屏假设：鸿蒙横屏平板 >=600vp 走缩放，
+  // 竖屏手机 <600vp 仍按固定列宽横向滚动。两端平台形态不同，这里只对齐鸿蒙自己。
+  if (isTabletWidth(widthVp)) {
+    return true;
+  }
+  // 手机布局：固定列宽总和 612vp，窗口放不下就还要横向滚动，入口必须留着。
   let total: number = 0;
   for (let i = 0; i < LAYOUT_WIDTHS.length; i++) {
     total += LAYOUT_WIDTHS[i];

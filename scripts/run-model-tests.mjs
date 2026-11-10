@@ -18,6 +18,7 @@ import { isDeepStrictEqual, inspect } from 'node:util';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MODEL_DIR = path.join(ROOT, 'entry', 'src', 'main', 'ets', 'model');
+const COMMON_DIR = path.join(ROOT, 'entry', 'src', 'main', 'ets', 'common');
 const TEST_DIR = path.join(ROOT, 'scripts', 'model-tests');
 const BUILD_DIR = path.join(ROOT, 'scripts', '.model-test-build');
 const GEN_DIR = path.join(BUILD_DIR, 'gen');
@@ -31,6 +32,10 @@ const MODEL_FILES = [
   'ShedRange', 'ShedText', 'ShedCoverage', 'ShedDisplay',
   'ShedDraft', 'ShedDeletePlan', 'FeedData', 'RowSettlement'
 ];
+
+// common/ 下同样是纯计算（不 import ArkUI），一并纳入回归：
+// LayoutRules 的列宽 / 铺满判据此前没有单测，600~612vp 边界因此漏掉过。
+const COMMON_FILES = ['LayoutRules'];
 
 const keepBuild = process.env.MODEL_TEST_KEEP === '1';
 
@@ -62,6 +67,15 @@ function copyModelSources() {
   const skipped = [];
   for (const name of MODEL_FILES) {
     const source = path.join(MODEL_DIR, `${name}.ets`);
+    if (!existsSync(source)) {
+      skipped.push(name);
+      continue;
+    }
+    writeFileSync(path.join(GEN_DIR, `${name}.ts`), readFileSync(source, 'utf8'));
+    copied.push(name);
+  }
+  for (const name of COMMON_FILES) {
+    const source = path.join(COMMON_DIR, `${name}.ets`);
     if (!existsSync(source)) {
       skipped.push(name);
       continue;

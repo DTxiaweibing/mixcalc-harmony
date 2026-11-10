@@ -282,3 +282,46 @@
   改动 1 行 + 注释，需重打包验证。用户未明确要求改，故本轮只排查不动手。
 - 发布包 `dist/mixcalc-0.3.6-release-signed.app` 依旧过期，定稿后必须重打再上架。
 
+### 任务 22 · 修复铺满判据 + 正文字号对齐 + 补布局判据回归
+用户三条指令：① 修掉 `fillsAllColumns` 要 612 才判铺满的问题；② 把鸿蒙正文 15vp 调到 16vp；
+③ 追问「`if (isTabletWidth(widthVp)) return true;` 是什么」，并指出**鸿蒙有横屏平板、安卓平板强制竖屏**，两端形态不同。
+
+**关于第 3 点的裁决（重要）**：那一行不是照搬安卓的竖屏假设，依据的是**鸿蒙自己**的
+`MixCalcTable.isTabletMode()`（`MixCalcTable.ets:516-518` 同样调用 `isTabletWidth` / `TABLET_MIN_WIDTH=600`）。
+含义是：11 列全可见且窗口已进入平板/宽屏模式时，列已被 `ensureWidths()` 缩放到窗宽、
+必然铺满，所以直接返回 true，不再拿固定 612vp 去卡。
+- 鸿蒙横屏平板 / 分屏（≥600vp，含 600~611vp）→ 缩放铺满 → true，快捷设置入口正确隐藏；
+- 鸿蒙竖屏手机（<600vp）→ 仍是固定 612vp 横向滚动 → false，入口保留；
+- 安卓平板强制竖屏只影响安卓自己的窗口宽度分布，不改变鸿蒙这条判据；
+  本轮**不动安卓、不改 `TABLET_MIN_WIDTH`**，只让判据与鸿蒙自身缩放逻辑同源。
+  将来若横屏平板要换阈值，改 `TABLET_MIN_WIDTH` 一处即可（两处共用）。
+
+**改动清单**：
+1. `common/LayoutRules.ets`：`fillsAllColumns` 全可见检查后补 `if (isTabletWidth(widthVp)) return true;`
+   + 注释说明依据鸿蒙自身缩放、非照搬安卓竖屏假设。
+2. `table/MixCalcTable.ets`：`fs()` 15vp → **16vp**（对齐安卓 `CellStyle` 16sp）；
+   表头注释「比正文小 1vp」→「小 2vp」。`fsHeader()` 仍 14vp —— 与安卓 14sp **本来就一致，未改**。
+3. `scripts/run-model-tests.mjs`：新增 `COMMON_DIR` / `COMMON_FILES`，让纯计算的
+   `common/LayoutRules.ets` 也能被编译进回归（原 `MODEL_FILES` 只扫 `model/` 8 个文件）。
+4. 新增 `scripts/model-tests/layout-rules.test.mjs`：**16 条断言**，覆盖列宽 11 列 / 棚号 72vp /
+   总和 612 / 阈值 600、手机 360·599 false、平板 600·611·612·横屏 800 true、
+   有隐藏列时任意宽度均 false、空表与非法宽度 false。
+
+**两端最终对齐**（数值层面）：
+| 项 | 安卓 0.3.6 | 鸿蒙 0.3.6 |
+|---|---|---|
+| 列宽 / 总宽 | 棚号 72dp / 612dp | 72vp / 612vp |
+| 棚号字号 | 16dp | 16vp |
+| 正文 / 表头 | 16sp / 14sp | 16vp / 14vp |
+| 行高 / 表头高 | 40dp / 40dp | 40vp / 40vp |
+| 平板阈值 | 600dp | 600vp |
+注：安卓用 `sp`（随系统字体缩放）、鸿蒙用 `vp`（固定不缩放），平台机制无法完全等价，数值已一致。
+
+**验收**：模型测试 **344 → ✓ 360 assertions**（编译 9 个文件）；
+`assembleHap` → **BUILD SUCCESSFUL in 2 min 5 s**；
+新包 `dist/mixcalc-0.3.6-debug-signed.hap`，SHA256 `6e6dc39b…7797`；
+`install -r -d` → `aa force-stop` + `aa start` → `bm dump` 核对 `0.3.6`。
+真机截图自检：正文 16vp 后序号 / 棚数 27 / 表尾统计 / 表头均完整无裁切，
+棚号两行 `1-3` / `…21-30…` 完整；截图与设备端临时文件已删除，项目无新增图片。
+发布包仍需重打。
+
