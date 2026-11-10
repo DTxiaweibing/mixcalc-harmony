@@ -5,7 +5,7 @@ import { promptAction, router, window, KeyboardAvoidMode } from '@kit.ArkUI';
 import { Batch } from '../model/Batch';
 import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
-import { settleZeroRowData } from '../model/RowSettlement';
+import { settleRows, RowSettleResult } from '../model/RowSettlement';
 import { t } from '../common/Strings';
 import { LAYOUT_COLUMN_IDS, fillsAllColumns, isTabletWidth } from '../common/LayoutRules';
 import { applyHomeBars, STATUS_BAR_COLOR, TABLE_BOTTOM_COLOR, toVp } from '../common/WindowChrome';
@@ -154,6 +154,10 @@ struct Index {
       this.store = await preferences.getPreferences(ctx, PREF_NAME);
       this.batches = await BatchStore.load(this.store, ROW_COUNT);
       this.activeBatch = await BatchStore.loadActive(this.store);
+      // 载入旧数据后先结算一次：清掉历史遗留的死行与脏数据，显示态等首次覆盖重算（R4）
+      for (let i: number = 0; i < this.batches.length; i++) {
+        settleRows(this.batches[i].rows, []);
+      }
     } catch (e) {
       // 读失败时保留首帧那两个空批次，界面照样可用
     }
@@ -375,8 +379,11 @@ struct Index {
     if (index === this.activeBatch || index < 0 || index >= this.batches.length) {
       return;
     }
-    // 切批次前把当前批次里棚数为 0 的行结算掉，再落盘
-    settleZeroRowData(this.currentBatch().rows);
+    // 切批次前把当前批次的死行回收掉、棚数为 0 的行清空、底部补回空行，再落盘
+    const settle: RowSettleResult = settleRows(this.currentBatch().rows, []);
+    if (settle.changed) {
+      this.errorText = this.computeError();
+    }
     this.saveAll();
     this.activeBatch = index;
     this.syncBatchSettings();
@@ -595,8 +602,11 @@ struct Index {
   }
 
   onPageHide(): void {
-    // 退出/切后台：棚数仍为 0 的行彻底清空，再保存
-    settleZeroRowData(this.currentBatch().rows);
+    // 退出/切后台：死行回收 + 棚数仍为 0 的行彻底清空 + 补回空行，再保存
+    const settle: RowSettleResult = settleRows(this.currentBatch().rows, []);
+    if (settle.changed) {
+      this.errorText = this.computeError();
+    }
     this.saveAll();
   }
 
