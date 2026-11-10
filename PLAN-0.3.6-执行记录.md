@@ -241,3 +241,44 @@
   再次 `aa force-stop` + `aa start` 后抓临时截图核对：68vp 列宽与 15vp 字号均已生效，
   第 1 行两行棚号 `1-3` / `…21-30…` 完整无裁字；截图看完连同设备端临时文件一并删除。
 
+### 任务 21 · 改以「已发布安卓」为基准对齐，并排查「显示所有列」阈值
+**用户改基准**：安卓 0.3.6 已发布、鸿蒙尚未发布，故不再改安卓，改为鸿蒙跟安卓走、都调大。
+
+查证安卓 `D:\mixcalc-lab`（0.3.6）：
+| 项 | 值 | 位置 |
+|---|---|---|
+| 列宽 | `{40, 72, 40, 40, 60×7}`，棚号 **72dp**，合计 **612dp** | `MixCalcActivity.java:148` |
+| 棚号展示字号 | `SHED_TEXT_SIZE_DP = 16`（density 换算，不随系统字体） | `MixCalcTableView.java:986` |
+| 正文 / 表头 | 16sp / 14sp | `CellStyle.java:75-79` |
+| 行高 / 表头 / 平板阈值 | 40dp / 40dp / `TABLET_MIN_WIDTH_DP = 600` | `MixCalcTableView.java:101-102`、`TabletLayout.java:9` |
+
+鸿蒙改动（2 个数值 + 注释）：`LAYOUT_WIDTHS[1]` 68 → **72vp**（合计 608 → 612）、
+`fsShed()` 15 → **16vp**。正文 15vp、表头 14vp **未动**（与安卓仍差 1 号，用户未要求，不擅自扩大改动面）。
+
+验收：模型测试 **✓ 344 assertions**（构建期间并行跑被系统 SIGTERM，构建结束后单独补跑通过）；
+`assembleHap` → **BUILD SUCCESSFUL in 8 min 21 s**（本轮机器资源紧张，编译 3m57s / 签名 1m12s）；
+新包 `dist/mixcalc-0.3.6-debug-signed.hap`，SHA256 `ae343906…61e6`；
+`install -r -d` → `aa force-stop` + `aa start` → `bm dump` 核对 `0.3.6 / 1000306`。
+截图自检：16vp @ 72vp 下两行棚号 `1-3` / `…21-30…` 完整、无裁字、两行不挤，字号与「27」协调；截图已清理。
+
+#### 「显示所有列」宽度阈值排查（本轮用户提问）
+- 项目里有**两套宽度判据**，都在 `common/LayoutRules.ets`：
+  1. `TABLET_MIN_WIDTH = 600`（`:16`）——平板布局阈值；`>=600vp` 时 `MixCalcTable.isTabletMode()`
+     把可见列**缩放到窗口宽**（`MixCalcTable.ets:516-567`），11 列必然全部铺满；
+  2. `fillsAllColumns(visible, widthVp)`（`:25-41`）——控制「快捷设置」入口是否隐藏
+     （`Index.ets:90-96`），实现是 `sum(LAYOUT_WIDTHS) <= widthVp`，**只看固定列宽总和**。
+- 历史值：0.3.5 基线棚号 60vp → 总和 **600**，与平板阈值 600 恰好重合，无缝隙；
+  本轮中间态依次为 72vp→612、68vp→608，最终跟随安卓回到 **612**。
+- 结论：**现在确实要求窗口宽 ≥ 612vp 才判定「铺满」**。手机（<600vp）恒定 false，
+  本来就要横向滚动，行为与以前一致；真正变化的是 **600 ≤ 窗口宽 < 612vp** 这一段。
+- ⚠️ **有问题**：这一段已进入平板模式、列被缩放铺满屏宽、11 列其实全显示，
+  但 `fillsAllColumns` 仍拿固定 612 去比 → 返回 false → 「快捷设置」入口在已铺满时多余出现。
+  这是多出 12vp 后新暴露的边界缝隙，总和 600 的时代不存在。
+- 安卓**没有**这个问题：`TabletLayout.fillsAllColumns(..., tabletMode)` 有平板分支
+  （`:89-93` 用 `computeWidths` 缩放后的实际总宽判断），`>=600dp` 恒 true。
+- 另注：`fillsAllColumns` / `LAYOUT_WIDTHS` 目前**没有模型层单测覆盖**（`scripts/` 无匹配）。
+- 建议修法（**未执行，等用户裁决**）：全可见检查之后补一行
+  `if (isTabletWidth(widthVp)) { return true; }`，与安卓 tabletMode 分支对齐；
+  改动 1 行 + 注释，需重打包验证。用户未明确要求改，故本轮只排查不动手。
+- 发布包 `dist/mixcalc-0.3.6-release-signed.app` 依旧过期，定稿后必须重打再上架。
+

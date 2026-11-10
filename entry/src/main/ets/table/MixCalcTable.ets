@@ -650,10 +650,10 @@ export struct MixCalcTable {
     return '14vp';
   }
 
-  // 棚号列：与正文同为 15vp 固定字号（对齐安卓「固定字号、不缩放」），给死值不随内容自适应。
-  // 两行折叠每行最多 9 字符，容纳靠 68vp 列宽，不再靠缩小字号。
+  // 棚号列：固定 16vp，对齐已发布安卓的 SHED_TEXT_SIZE_DP = 16（不缩放、不随系统字体大小）。
+  // 两行折叠每行最多 9 字符，容纳靠与安卓一致的 72vp 列宽，不再靠缩小字号。
   private fsShed(): string {
-    return '15vp';
+    return '16vp';
   }
 
   // 自绘光标（数字列没有系统输入框，只能自己闪）
@@ -2295,7 +2295,7 @@ export struct MixCalcTable {
     Text(this.cellText(row, col, r))
       .width(this.cw(col))
       .height(this.rh())
-      // 棚号列用固定字号（跟安卓一样不随内容缩放）：9 字符一行靠 68vp 列宽 + 两行折叠容纳
+      // 棚号列用固定字号（跟安卓一样不随内容缩放）：9 字符一行靠 72vp 列宽 + 两行折叠容纳
       .fontSize(col === 1 ? this.fsShed() : this.fs())
       .fontWeight(FontWeight.Bold)
       .fontColor(this.cellColor(col))
