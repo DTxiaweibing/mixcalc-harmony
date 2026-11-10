@@ -325,3 +325,43 @@
 棚号两行 `1-3` / `…21-30…` 完整；截图与设备端临时文件已删除，项目无新增图片。
 发布包仍需重打。
 
+## 任务 23：重打测试包，供云调试平台测试（21:44-21:50）
+
+用户表示对连续几轮显示/布局改动不放心，要求先出一份测试包上传云调试自行验证，
+**本轮不改任何代码、不做功能改动**。
+
+**出包前状态**：`git status` 仅 `.workbuddy/` 未跟踪，HEAD = `5ee48ff`（任务 22 已全部提交）；
+模型测试 **✓ 360 assertions**（编译 9 个文件）；关键数值复核：
+`LAYOUT_WIDTHS[1]=72`、总宽 612、`TABLET_MIN_WIDTH=600`、`fsShed=16vp`、`fs=16vp`、`fsHeader=14vp`。
+
+**构建**：删除 `entry-default-signed.hap` / `entry-default-unsigned.hap` 后
+`assembleHap -p product=default -p buildMode=debug --no-daemon` →
+**BUILD SUCCESSFUL in 43 s 883 ms**。`CompileArkTS` 为 UP-TO-DATE（代码与手机上同一份，
+编译缓存命中），`PackageHap`(3s725ms) 与 `SignHap`(19s260ms) 均重跑。
+
+**交付包**：`dist/mixcalc-0.3.6-debug-signed.hap`，2,686,123 B，
+SHA256 `b76dca4691acb68bd9e723ac3c69b303f101f30f451a8077b122d04ca9980cf1`
+（与上一版 `6e6dc39b…7797` 不同，签名块已重生成）。`dist/` 保持只有这一个包，
+无截图、无界面树、无校验文件等冗余产物。
+
+**包内静态校验**（`unzip -p`）：`module.json` 中
+`versionName=0.3.6`、`versionCode=1000306`、`bundleName=com.shrimpfarm.mixcalc`；
+`ets/modules.abc` 可检索到 `16vp` 字符串标记；包内含 `pack.info`、`resources.index`、
+中英文 help 资源等完整条目。
+
+**安装自检**（同一台手机 `192.168.10.103:42085`，仅验证包可用，不替用户做功能测试）：
+`install -r -d` → `install bundle successfully`；
+`aa force-stop` + `aa start` → `start ability successfully`；
+`pidof` = 58035；`bm dump` 主段 `versionCode 1000306 / versionName 0.3.6`。
+
+**云调试建议重点验证**（用户自行测试，本轮未执行）：
+1. 横屏平板 / 分屏在 **600~611vp** 时：11 列是否缩放铺满，「快捷设置」入口是否按新判据隐藏；
+2. 棚号两行折叠在 **16vp / 72vp** 下是否完整、无裁字、无两行挤压；
+3. 正文统一 **16vp** 后数字、表尾统计、表头是否裁切或顶出格子；
+4. 清空 / 重置棚号（派生显示态清除）与转出转入后清空目标行能否退回原行（来路保存）；
+5. 切批次、退后台再回来、行结算补空行。
+
+**后续**：云调试通过后再重打**正式发布包**（`dist/mixcalc-0.3.6-release-signed.app`
+仍是过期产物，不可直接上架）。若平台要求 `.app` 包或正式签名而非 debug 签名 HAP，
+需按平台要求补打。
+
