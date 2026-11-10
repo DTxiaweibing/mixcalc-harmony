@@ -3,6 +3,8 @@ import { ownedSets, findOverLimit, MAX_SHED_NUMBER, renormalize } from '../model
 import { settleZeroRowData, settleRows, RowSettleResult } from '../model/RowSettlement';
 import { recompute, ShedDraftResult } from '../model/ShedDraft';
 import { render as renderShedDisplay } from '../model/ShedDisplay';
+import { transfer, remove as removeShedNumbers, pointlessWholeRowMove, normalize as normalizeShedNumbers } from '../model/ShedText';
+import { ShedDeletePlan } from '../model/ShedDeletePlan';
 import { t } from '../common/Strings';
 import { promptAction } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
@@ -11,6 +13,12 @@ import { LAYOUT_COLUMN_IDS, LAYOUT_WIDTHS, isTabletWidth, rightAlignedX } from '
 const COLUMN_IDS: string[] = LAYOUT_COLUMN_IDS;
 const HEAD_KEYS: string[] = ['col.seq', 'col.shed', 'col.count', 'col.avg', 'col.ferm', 'col.powder', 'col.f03', 'col.f05', 'col.f10', 'col.water', 'col.weigh'];
 const WIDTHS: number[] = LAYOUT_WIDTHS;
+// 棚号气泡 ⋮ 菜单的动作码
+const SHED_ACTION_SELECT_ALL: number = 1;
+const SHED_ACTION_SELECT_INVERT: number = 2;
+const SHED_ACTION_DELETE: number = 3;
+const SHED_ACTION_TRANSFER_OUT: number = 4;
+const SHED_ACTION_TRANSFER_IN: number = 5;
 const ROW_H: number = 40;
 const HEAD_H: number = 40;
 
@@ -359,6 +367,25 @@ export struct MixCalcTable {
     customStyle: true
   });
 
+  // 删除棚号确认框：正文按「有来路会退回 / 没来路真删」分开说清，要真删的点名
+  private shedDeleteMessage: string = '';
+  private shedDeleteRow: number = -1;
+  private shedDeleteTargets: number[] = [];
+  private shedDeleteController: CustomDialogController = new CustomDialogController({
+    builder: ConfirmDialog({
+      title: t(this.lang, 'shed.deleteTitle'),
+      message: this.shedDeleteMessage,
+      cancelText: t(this.lang, 'btn.cancel'),
+      confirmText: t(this.lang, 'shed.delete'),
+      confirmColor: '#D32F2F',
+      onConfirm: () => {
+        this.applyDeleteShedNumbers();
+      }
+    }),
+    autoCancel: true,
+    customStyle: true
+  });
+
   private hintTitle: string = '';
   private hintMessage: string = '';
   private hintSecondaryText: string = '';
@@ -395,6 +422,20 @@ export struct MixCalcTable {
   @State shedListCountText: string = '';
   @State shedListNumbers: number[] = [];
   private shedListOpenedAt: number = 0;
+  // 气泡属于哪一行（删/转都按行号定位，行被回收后要重定位）
+  @State shedListRow: number = -1;
+  // 气泡里已选中的号码（绿底 ↔ 蓝底）
+  @State shedSelected: number[] = [];
+  // 气泡右上角 ⋮ 菜单
+  @State shedMenuOpen: boolean = false;
+  @State shedMenuX: number = 0;
+  @State shedMenuY: number = 0;
+  @State shedMenuLabels: string[] = [];
+  @State shedMenuActions: number[] = [];
+  @State shedMenuW: number = 150;
+  // 待转池：转出后先记在这里，等另一行点【转入】才真正搬走；来源行数据一个字都不改
+  private pendingTransferNumbers: number[] = [];
+  private pendingTransferSourceRow: number = -1;
 
   // ===== 列状态 =====
   private isVisible(index: number): boolean {
@@ -487,6 +528,8 @@ export struct MixCalcTable {
       this.pickOpen = false;
       this.ratioOpen = false;
       this.shedListOpen = false;
+      this.shedMenuOpen = false;
+      this.clearPendingTransfer();
       this.onViewWidth(widthVp);
     }
     // 变宽后旧的横向滚动量可能超出新内容宽，不收就会在右侧留一条空白
@@ -904,8 +947,14 @@ export struct MixCalcTable {
     this.onChanged();
   }
 
-  // 待转池（任务 11 实现真实逻辑；先留空，保证行结算处可调用）
+  // 待转池作废：转出后没走来转入这条路，或任何一次结算，都把这次转出丢掉
   private clearPendingTransfer(): void {
+    this.pendingTransferNumbers = [];
+    this.pendingTransferSourceRow = -1;
+  }
+
+  private hasPendingTransfer(): boolean {
+    return this.pendingTransferSourceRow >= 0 && this.pendingTransferNumbers.length > 0;
   }
 
   private sumBelowFirst(): number {
@@ -1445,18 +1494,23 @@ export struct MixCalcTable {
     return rows * 30 + 18;
   }
 
-  // 点「棚数」：在格子下沿弹出本行实际的棚号；棚数为 0 的行不弹
+  // 点「棚数」：在格子下沿弹出本行实际的棚号。
+  // 打开条件（对齐安卓）：本行棚号有内容（哪怕棚数被后行盖成 0），或者有待转池要往这行转入；
+  // 两者都没有就没什么可点的，不弹。
   private showShedList(rowIndex: number): void {
     if (rowIndex < 0 || rowIndex >= this.rows.length) {
       return;
     }
-    if (this.rows[rowIndex].shedCount <= 0) {
-      return;
-    }
     const numbers: number[] = this.shedNumbersOf(rowIndex);
-    if (numbers.length === 0) {
+    const hasShedText: boolean = this.rows[rowIndex].getShedDisplay().trim().length > 0;
+    const canTransferIn: boolean = this.hasPendingTransfer() && rowIndex !== this.pendingTransferSourceRow;
+    if (numbers.length === 0 && !hasShedText && !canTransferIn) {
       return;
     }
+    // 每次打开都是全新的选择态；待转池不受影响（它只在“关掉气泡却没转入”时作废）
+    this.shedSelected = [];
+    this.shedMenuOpen = false;
+    this.shedListRow = rowIndex;
     // 号码块宽度随位数变化：1~2 位是 28vp 圆点，位数多了变胶囊
     // 13vp 粗体一个数字约 6vp 宽（实测 3 位数块宽 30vp），按 6.2 估偏保守一点
     let maxDigits: number = 1;
@@ -1483,7 +1537,8 @@ export struct MixCalcTable {
         x = Math.max(6, this.viewW - w - 4);
       }
     }
-    const badgeH: number = this.badgeAreaHeight(numbers.length, w, chipW);
+    // 没有棚号（被后行盖光 / 只等转入）时留一块空白位置放提示文字
+    const badgeH: number = numbers.length === 0 ? 46 : this.badgeAreaHeight(numbers.length, w, chipW);
     const headH: number = 40;
     const contentH: number = headH + badgeH;
     // 上边贴住单元格下沿（表头高 + 行号*行高 - 滚动量）
@@ -1513,6 +1568,308 @@ export struct MixCalcTable {
     this.shedListOpenedAt = Date.now();
     this.shedListOpen = true;
   }
+
+  // ===== 气泡：号码块选中 / ⋮ 菜单 / 删除 / 转出 / 转入 =====
+
+  private isShedSelected(n: number): boolean {
+    return this.shedSelected.indexOf(n) >= 0;
+  }
+
+  // 号码块选中态：绿底黑字 ↔ 蓝底白字（对齐安卓 applyShedChipStyle）
+  private toggleShedChip(n: number): void {
+    const next: number[] = [];
+    let found: boolean = false;
+    for (let i = 0; i < this.shedSelected.length; i++) {
+      if (this.shedSelected[i] === n) {
+        found = true;
+      } else {
+        next.push(this.shedSelected[i]);
+      }
+    }
+    if (!found) {
+      next.push(n);
+      next.sort((a: number, b: number): number => a - b);
+    }
+    this.shedSelected = next;
+  }
+
+  // ⋮ 菜单：全选 / 反选 / 删除 / 转出 / 转入
+  private openShedMenu(): void {
+    const labels: string[] = [];
+    const actions: number[] = [];
+    actions.push(SHED_ACTION_SELECT_ALL);
+    labels.push(t(this.lang, 'shed.selectAll'));
+    actions.push(SHED_ACTION_SELECT_INVERT);
+    labels.push(t(this.lang, 'shed.invert'));
+    if (this.shedSelected.length > 0) {
+      actions.push(SHED_ACTION_DELETE);
+      labels.push(t(this.lang, 'shed.delete'));
+      actions.push(SHED_ACTION_TRANSFER_OUT);
+      labels.push(t(this.lang, 'shed.transferOut'));
+    }
+    // 转入：只要不是来源行自己，上下都能转——
+    // 往下转靠后行优先压过来；往上转靠把来源行的单号删掉，号码自动退回给上面的行
+    if (this.hasPendingTransfer() && this.shedListRow !== this.pendingTransferSourceRow) {
+      actions.push(SHED_ACTION_TRANSFER_IN);
+      labels.push(t(this.lang, 'shed.transferIn'));
+    }
+    const itemH: number = 40;
+    const menuW: number = Math.max(150, Math.min(220, this.shedListW));
+    let x: number = this.shedListX + this.shedListW - menuW;
+    if (x < 6) {
+      x = 6;
+    }
+    // 菜单右边缘跟气泡右边缘对齐，上边贴住气泡表头下沿
+    let y: number = this.shedListY + 40;
+    const menuH: number = labels.length * itemH + 8;
+    if (y + menuH > this.viewH - 4) {
+      y = Math.max(8, this.shedListY - menuH - 4);
+    }
+    this.shedMenuW = menuW;
+    this.shedMenuLabels = labels;
+    this.shedMenuActions = actions;
+    this.shedMenuX = x;
+    this.shedMenuY = y;
+    this.shedMenuOpen = true;
+  }
+
+  private handleShedMenuAction(action: number): void {
+    this.shedMenuOpen = false;
+    const row: number = this.shedListRow;
+    if (row < 0 || row >= this.rows.length) {
+      return;
+    }
+    if (action === SHED_ACTION_SELECT_ALL || action === SHED_ACTION_SELECT_INVERT) {
+      const all: boolean = action === SHED_ACTION_SELECT_ALL;
+      const next: number[] = [];
+      for (let i = 0; i < this.shedListNumbers.length; i++) {
+        const n: number = this.shedListNumbers[i];
+        if (all || !this.isShedSelected(n)) {
+          next.push(n);
+        }
+      }
+      this.shedSelected = next;
+      return;
+    }
+    if (action === SHED_ACTION_DELETE) {
+      this.confirmDeleteShedNumbers(row);
+      return;
+    }
+    if (action === SHED_ACTION_TRANSFER_OUT) {
+      // 只把号码记进待转池，来源行的数据一个字都不改，气泡直接关掉
+      this.startPendingTransfer(row, this.shedSelected);
+      this.shedListOpen = false;
+      return;
+    }
+    if (action === SHED_ACTION_TRANSFER_IN) {
+      this.shedListOpen = false;
+      this.applyTransferIn(row);
+    }
+  }
+
+  private startPendingTransfer(row: number, numbers: number[]): void {
+    if (numbers.length === 0) {
+      return;
+    }
+    this.pendingTransferNumbers = numbers.slice();
+    this.pendingTransferSourceRow = row;
+  }
+
+  // 删除 = 这些棚卖了：从本行的棚号里剔掉（区间该拆就拆），然后整表重算。
+  // 「有地方退就退」：上面某行还申明着的号，只从本行申明里拿掉，号立刻退回上行继续算料；
+  // 「没地方退就等于删除」：别的行都没有它，本行剔掉就是全表消失。
+  private confirmDeleteShedNumbers(row: number): void {
+    const targets: number[] = this.shedSelected.slice();
+    if (targets.length === 0) {
+      return;
+    }
+    // 点了删除就不是转入这条路，待转池作废
+    this.clearPendingTransfer();
+    const declared: string[] = this.snapshotShedTexts();
+    const plan: ShedDeletePlan = ShedDeletePlan.of(declared, row, targets);
+    this.shedDeleteRow = row;
+    this.shedDeleteTargets = targets;
+    this.shedDeleteMessage = this.buildShedDeleteMessage(plan);
+    this.shedDeleteController.open();
+  }
+
+  /**
+   * 删除确认框的正文：说清楚“会退回上面”和“真被删掉”各有多少个，
+   * 后半段把要真删的号码点名（升序、连号收区间），用户才知道自己删掉的是什么。
+   */
+  private buildShedDeleteMessage(plan: ShedDeletePlan): string {
+    const fallback: number = plan.fallback.length;
+    const permanent: number = plan.permanent.length;
+    if (permanent > 0 && fallback > 0) {
+      return t(this.lang, 'shed.deleteMsgMixed')
+        .replace('%d', (fallback + permanent).toString())
+        .replace('%d', fallback.toString())
+        .replace('%d', permanent.toString())
+        .replace('%s', this.compactNumberList(plan.permanent));
+    }
+    if (permanent > 0) {
+      return t(this.lang, 'shed.deleteMsgPermanent')
+        .replace('%d', permanent.toString())
+        .replace('%s', this.compactNumberList(plan.permanent));
+    }
+    return t(this.lang, 'shed.deleteMsgFallback').replace('%d', fallback.toString());
+  }
+
+  // 号码列表压成一行；太长就只列前 12 个，别把确认框撑出屏幕
+  private compactNumberList(numbers: number[]): string {
+    if (numbers.length === 0) {
+      return '';
+    }
+    const full: string = normalizeShedNumbers(numbers);
+    if (full.length <= 80) {
+      return full;
+    }
+    const head: number[] = [];
+    const take: number = Math.min(12, numbers.length);
+    for (let i = 0; i < take; i++) {
+      head.push(numbers[i]);
+    }
+    const suffix: string = this.lang === 'en' ? ' … (%d total)' : ' …（共 %d 个）';
+    return normalizeShedNumbers(head) + suffix.replace('%d', numbers.length.toString());
+  }
+
+  private applyDeleteShedNumbers(): void {
+    const rowIndex: number = this.shedDeleteRow;
+    const targets: number[] = this.shedDeleteTargets;
+    this.shedDeleteRow = -1;
+    this.shedDeleteTargets = [];
+    if (rowIndex < 0 || rowIndex >= this.rows.length) {
+      return;
+    }
+    const data: FeedData = this.rows[rowIndex];
+    this.shedListOpen = false;
+    const oldText: string = data.shedNumber;
+    const newText: string = removeShedNumbers(oldText, targets);
+    if (newText !== oldText) {
+      this.commitShedText(rowIndex, newText);
+    }
+    // 号删光了：这行既没棚号也没棚数，它就是一张废纸，整行回收，
+    // 下面的行往上顶，底部补空行
+    const emptied: number[] = [];
+    if (data.shedNumber.trim().length === 0 && data.shedCount <= 0) {
+      emptied.push(this.rows.indexOf(data));
+    }
+    this.settleRowsAndPad(emptied);
+  }
+
+  // 转入：号码池的作用就是任意行之间随便转，上下都要能走通。
+  //   往下转：来源行一个字都不用动——目标行在下面，后行优先自然把这批号压过去。
+  //   往上转：来源行必须真的松手，单号直接删；号在连续段里只能把这段拆开
+  //          （20-30 去 25 → 20-24 26-30），拆完自动退回给包着它的上一行。
+  private applyTransferIn(targetRow: number): void {
+    if (!this.hasPendingTransfer() || targetRow === this.pendingTransferSourceRow) {
+      this.clearPendingTransfer();
+      return;
+    }
+    const numbers: number[] = this.pendingTransferNumbers.slice();
+    const sourceRow: number = this.pendingTransferSourceRow;
+    if (targetRow < 0 || targetRow >= this.rows.length || sourceRow < 0 || sourceRow >= this.rows.length) {
+      this.clearPendingTransfer();
+      return;
+    }
+    const target: FeedData = this.rows[targetRow];
+    const source: FeedData = this.rows[sourceRow];
+    const oldTarget: string = target.shedNumber;
+    const oldSource: string = source.shedNumber;
+    const sourceHadContent: boolean = oldSource.trim().length > 0;
+    const targetHadContent: boolean = oldTarget.trim().length > 0;
+
+    // 防呆：整行的号全转给一个空行，等于只是把整行往下挪一格（来源行被回收、下面整体上移），
+    // 屏幕闪一下却什么都没变——直接不让转；目标行不是空的（真合并）才照常转。
+    if (pointlessWholeRowMove(oldTarget, this.shedNumbersOf(sourceRow), numbers)) {
+      promptAction.showToast({
+        message: t(this.lang, 'shed.transferWholeToBlank'),
+        duration: 2500
+      });
+      this.clearPendingTransfer();
+      return;
+    }
+
+    // 两边文本都按“转移后的实际号码”重排重写（升序、连号合成区间）。
+    // 没有任何“落在目标范围内就跳过”的暗规则——文本里的号就是这行认领的号，
+    // 棚数归谁由打点覆盖（后行优先）说了算。
+    const moved: string[] = transfer(oldSource, oldTarget, numbers);
+
+    // 先把池子清掉，后面可能弹提示，别让池子停在半路
+    this.clearPendingTransfer();
+
+    this.commitShedText(sourceRow, moved[0]);
+    this.commitShedText(targetRow, moved[1]);
+
+    // 重排：把两行文本重写成各自“实际拥有”的号码（覆盖之后的真相），
+    // 别的行后来居上抢走的号不再挂在文本里，后续转移不再被幽灵号干扰
+    this.rewriteToOwned(sourceRow);
+    this.rewriteToOwned(targetRow);
+    this.forceRecomputeRows([sourceRow, targetRow]);
+
+    // 一次算齐所有该回收的行：被转空的两行 + 别的死行（幽灵号清掉后露出来的），
+    // 一起删、一次上顶。分两次删会让用户看到“先进一行、再进一行”。
+    const emptied: number[] = [];
+    if (target.shedCount <= 0 && targetHadContent) {
+      const tIdx: number = this.rows.indexOf(target);
+      if (tIdx >= 0) {
+        emptied.push(tIdx);
+      }
+    }
+    if (source.shedCount <= 0 && sourceHadContent) {
+      const sIdx: number = this.rows.indexOf(source);
+      if (sIdx >= 0 && emptied.indexOf(sIdx) < 0) {
+        emptied.push(sIdx);
+      }
+    }
+    this.settleRowsAndPad(emptied);
+  }
+
+  // 重排：把一行的棚号文本重写成它“实际拥有”的号码（打点覆盖、后行优先之后的真相），
+  // 升序、连号合成区间。转移 / 删除之后调用，保证文本永远和棚数对得上。
+  private rewriteToOwned(rowIndex: number): void {
+    if (rowIndex < 0 || rowIndex >= this.rows.length) {
+      return;
+    }
+    const data: FeedData = this.rows[rowIndex];
+    const owned: string = normalizeShedNumbers(this.shedNumbersOf(rowIndex));
+    if (owned !== data.shedNumber.trim()) {
+      this.commitShedText(rowIndex, owned);
+    }
+  }
+
+  // 一次动好几行的操作（转入）收尾用：先跑打点覆盖，再把参与的行强制重算一遍派生值
+  private forceRecomputeRows(rowIndexes: number[]): void {
+    this.applyShedCoverage();
+    for (let i = 0; i < rowIndexes.length; i++) {
+      const r: number = rowIndexes[i];
+      if (r >= 0 && r < this.rows.length) {
+        this.rows[r].updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+      }
+    }
+    this.version = this.version + 1;
+    this.onChanged();
+  }
+
+  // 提交一格的棚号文本（对齐安卓 commitCell(row, "shed_number", text)）
+  private commitShedText(rowIndex: number, text: string): void {
+    if (rowIndex < 0 || rowIndex >= this.rows.length) {
+      return;
+    }
+    const row: FeedData = this.rows[rowIndex];
+    const value: string = text.trim();
+    const oldCount: number = row.shedCount;
+    const oldAverage: number = row.average;
+    row.setShedNumber(value);
+    if (row.shedCount !== oldCount && oldAverage > 0 && row.canEditAverage()) {
+      row.setAverageManually(oldAverage, this.fermentedInAverage);
+    }
+    this.applyShedCoverage();
+    row.updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+    this.version = this.version + 1;
+    this.onChanged();
+  }
+
   private openEditor(row: number, column: number): void {
     if (row < 0 || row >= this.rows.length) {
       return;
@@ -1531,6 +1888,10 @@ export struct MixCalcTable {
     }
     if (!this.isEditableColumn(column)) {
       return;
+    }
+    // 待转池有号码时，除了「点另一行的棚数格」（上面已 return），任何一次落到格子上都把池子作废
+    if (this.hasPendingTransfer()) {
+      this.clearPendingTransfer();
     }
     if (!this.isCellEnabled(this.rows[row], column)) {
       return;
@@ -2371,6 +2732,9 @@ export struct MixCalcTable {
               return;
             }
             this.shedListOpen = false;
+            this.shedMenuOpen = false;
+            // 气泡关掉了却没走来转入这条路，这次转出作废
+            this.clearPendingTransfer();
           })
 
         Column() {
@@ -2383,10 +2747,22 @@ export struct MixCalcTable {
             Text(this.shedListCountText)
               .fontSize('12vp')
               .fontColor('#666666')
+            // ⋮ 菜单入口：全选 / 反选 / 删除 / 转出 / 转入
+            Text('⋮')
+              .fontSize('20vp')
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#333333')
+              .textAlign(TextAlign.Center)
+              .width(48)
+              .height(40)
+              .margin({ left: 6 })
+              .onClick(() => {
+                this.openShedMenu();
+              })
           }
           .width('100%')
           .height(40)
-          .padding({ left: 10, right: 10 })
+          .padding({ left: 10, right: 4 })
 
           Divider().strokeWidth(1).color('#E0E0E0')
 
@@ -2407,13 +2783,16 @@ export struct MixCalcTable {
                     .constraintSize({ minWidth: 28 })
                     .padding({ left: 6, right: 6 })
                     .borderRadius(14)
-                    .backgroundColor('#A8DDB5')
-                    .fontColor('#000000')
+                    .backgroundColor(this.isShedSelected(n) ? '#2F6FED' : '#A8DDB5')
+                    .fontColor(this.isShedSelected(n) ? '#FFFFFF' : '#000000')
                     .fontSize('13vp')
                     .fontWeight(FontWeight.Bold)
                     .textAlign(TextAlign.Center)
                     .margin({ right: 2, bottom: 2 })
-                }, (n: number) => 's' + n.toString())
+                    .onClick(() => {
+                      this.toggleShedChip(n);
+                    })
+                }, (n: number) => 's' + n.toString() + (this.isShedSelected(n) ? '1' : '0'))
               }
               .width('100%')
             }
@@ -2429,6 +2808,30 @@ export struct MixCalcTable {
         .clip(true)
         .shadow({ radius: 12, color: '#33000000', offsetX: 0, offsetY: 3 })
         .position({ x: this.shedListX, y: this.shedListY })
+
+        // ⋮ 菜单：右边缘跟气泡右边缘对齐
+        if (this.shedMenuOpen) {
+          Column() {
+            ForEach(this.shedMenuLabels, (label: string, index: number) => {
+              Text(label)
+                .width('100%')
+                .height(40)
+                .fontSize('14vp')
+                .fontColor(index < 2 ? '#333333' : (this.shedMenuActions[index] === SHED_ACTION_DELETE ? '#D32F2F' : '#333333'))
+                .textAlign(TextAlign.Center)
+                .onClick(() => {
+                  this.handleShedMenuAction(this.shedMenuActions[index]);
+                })
+            }, (label: string, index: number) => 'm' + index.toString() + label)
+          }
+          .width(this.shedMenuW)
+          .padding({ top: 4, bottom: 4 })
+          .backgroundColor(Color.White)
+          .borderRadius(10)
+          .clip(true)
+          .shadow({ radius: 10, color: '#33000000', offsetX: 0, offsetY: 2 })
+          .position({ x: this.shedMenuX, y: this.shedMenuY })
+        }
       }
     }
     .width('100%')
