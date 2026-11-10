@@ -213,3 +213,26 @@
 - 提醒：这轮改动同样发生在正式发布包之后，`dist/mixcalc-0.3.6-release-signed.app` 依旧过期，
   定稿后必须**重打一次发布包**再上架。
 
+### 任务 20 · 棚号字号 15vp + 列宽收到 68vp
+- 用户先说「棚号字号也 15 号吧」，推包过程中又追加「把列宽改成 68 试试」。
+  **最终交付状态：字号 15vp（与正文一致）+ 棚号列宽 68vp。**
+- 中间态 `15vp @ 72vp` 曾打一版并推送（SHA256 `86fde882…e3ba`），用户随即要求收窄到 68vp，
+  该中间包已被最终包覆盖，不作交付。
+- 有效改动只有 2 个数值：`fsShed()` `14vp → 15vp`；`LAYOUT_WIDTHS[1]` `72 → 68`（合计 612 → 608）。
+  其余是注释同步（原注释写「字号必须比正文小一号」「靠 72vp 列宽」，已过时）。
+- **不动**：其余 10 列宽度、两行折叠算法（每行 ≤9 字符）、`lineHeight 15` / `maxLines 2`、
+  编辑/清除/重置/转出转入逻辑、版本 `0.3.6 / 1000306`。
+- 截图自检（中间态 15vp@72vp）：`snapshot_display` 抓图核对，第 1 行两行棚号
+  `1-3` / `…21-30…` 显示完整、无裁字、两行不重叠，字号与「27」等正文数字一致。
+  截图只放系统临时目录，看完连同设备端 `/data/local/tmp/fs15.jpeg` 一并删除；项目目录无新增图片。
+- 验收：`node scripts/run-model-tests.mjs` → **✓ 344 assertions**；删旧 hap 强制重建，
+  `CompileArkTS 1m19s` + `PackageHap` + `SignHap` 全部重跑 → **BUILD SUCCESSFUL in 2 min 19 s**。
+- 最终产物：`dist/mixcalc-0.3.6-debug-signed.hap`，SHA256
+  `f16f6273161291e92302785cd8bf16ecd095a504891e96d1b25eb20af82423e1`。
+  `tconn 192.168.10.103:42085` → `install -r -d` 成功 → `aa force-stop` + `aa start` 成功 →
+  `bm dump` 核对 `0.3.6`。
+- 待真机确认：68vp 比 72vp 少 4vp，15vp 字号下最长 9 字符行可能略紧；
+  且棚号 `lineHeight` 仍是 15vp（当初配小字号用的），若看着挤可把它调到 18vp 与正文一致
+  —— 需用户裁决后再动，不擅自多改。
+- 发布包 `dist/mixcalc-0.3.6-release-signed.app` 依旧过期，定稿后必须重打再上架。
+
