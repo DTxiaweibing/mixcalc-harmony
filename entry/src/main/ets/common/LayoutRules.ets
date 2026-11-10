@@ -6,10 +6,10 @@ export const LAYOUT_COLUMN_IDS: string[] = [
   'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'
 ];
 
-// 手机布局的固定列宽（vp），合计 600：窗口宽度不到 600 时横向滚动
-// 棚号列恢复 0.3.5 的 60vp：和后面 60vp 的列一样宽，列对齐与横向滚动手感不变。
-// 两行棚号显示靠单元格固定 13vp 小字号，不靠加宽列。
-export const LAYOUT_WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
+// 手机布局的固定列宽（vp），合计 612：窗口宽度不到 612 时横向滚动
+// 棚号列 72vp：两行折叠每行最多 9 字符，字号 14vp 时 60vp 实测会被裁切，
+// 加宽到 72vp 才能完整显示。其余列保持 0.3.5 基线不变。
+export const LAYOUT_WIDTHS: number[] = [40, 72, 40, 40, 60, 60, 60, 60, 60, 60, 60];
 
 // 平板布局的最小窗口宽度（vp），与安卓 TABLET_MIN_WIDTH_DP 一致
 export const TABLET_MIN_WIDTH: number = 600;
@@ -31,7 +31,7 @@ export function fillsAllColumns(visible: boolean[], widthVp: number): boolean {
     }
   }
   // 平板布局（>=600vp）会把可见列整体缩放到窗宽，全可见时必然铺满；
-  // 手机布局是 600vp 固定列宽，只有窗口宽到放得下才算铺满，否则还在横向滚动。
+  // 手机布局是固定列宽总和（612vp），只有窗口宽到放得下才算铺满，否则还在横向滚动。
   let total: number = 0;
   for (let i = 0; i < LAYOUT_WIDTHS.length; i++) {
     total += LAYOUT_WIDTHS[i];

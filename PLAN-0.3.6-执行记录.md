@@ -190,3 +190,26 @@
   `aa force-stop` + `aa start` → `start ability successfully`；`bm dump` 核对 `1000306 / 0.3.6`。
 - 本轮未生成任何截图或界面树文件（用户已清理过一次）。
 
+### 任务 19 · 棚号列宽 60vp → 72vp（14vp 字号显示不下）
+- 用户真机反馈：字号回到 14vp 后棚号「还是没办法显示 / 显示不正常」，要求把棚号列加宽到 **72vp** 再试。
+- 改动只有一处数值：`LAYOUT_WIDTHS[1]` 60 → 72，列宽合计 600 → 612；另同步两条已过时的注释
+  （原注释写「靠 13vp 小字号、不靠加宽列」「合计 600」，与当前 14vp + 72vp 不符）。
+- **明确不动**：`fsShed()` 仍 14vp、其余 10 列宽度、两行折叠算法（每行 ≤9 字符）、
+  `lineHeight 15` / `maxLines 2`、编辑/清除/重置/转出转入逻辑、版本 `0.3.6 / 1000306`。
+- `fillsAllColumns()` 用 `LAYOUT_WIDTHS` 求和动态算总宽，加宽后自动跟随，无需改代码；
+  `TABLET_MIN_WIDTH` 仍 600，平板整体缩放逻辑不受影响。
+- 验收：`node scripts/run-model-tests.mjs` → **✓ 344 assertions**；
+  先删旧 `entry-default-signed.hap` / `entry-default-unsigned.hap` 强制重建，
+  `CompileArkTS 54s` + `PackageHap` + `SignHap` 全部重跑 →
+  **BUILD SUCCESSFUL in 1 min 58 s**（仅既有 deprecated / 异常告警）。
+- 产物：`dist/mixcalc-0.3.6-debug-signed.hap`（2,686,169 B，18:58，
+  SHA256 `142194215161F0511F7861F0B3E847DB51D6BDE7CDAF6EC4199D0235A9610175`，与上一版 `713FE73B…` 不同，确认是新包）。
+- 推送：`hdc tconn 192.168.10.103:42085` → Connect OK（期间 WiFi 连接掉过两次，重连即可）；
+  `install -r -d` → `install bundle successfully`；`aa force-stop` + `aa start` → 成功；
+  `bm dump` 核对 `versionCode 1000306 / versionName 0.3.6`。
+- 本轮未生成任何截图或界面树文件。
+- 待用户真机看显示效果：若 72vp 仍被裁，下一步可选「字号回 13vp」或「继续加宽到 84vp」，
+  由用户裁决后再动，不擅自多改。
+- 提醒：这轮改动同样发生在正式发布包之后，`dist/mixcalc-0.3.6-release-signed.app` 依旧过期，
+  定稿后必须**重打一次发布包**再上架。
+
