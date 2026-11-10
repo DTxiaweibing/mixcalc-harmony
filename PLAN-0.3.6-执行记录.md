@@ -137,3 +137,16 @@
 - 待用户真机复核：⋮ 菜单项（选中后应出现「删除」「转出」）、转出→转入、清空下行看号码是否退回上行。
 - 调试产物：`dist/mixcalc-0.3.6-debug-signed.hap`；截图 `dist/shot-0.3.6.jpeg`、`shot-bubble.jpeg`、`shot-select4.jpeg`。
 
+### 任务 16 · 打正式发布包（上架用）
+- 用 `scripts/build-release-app.ps1`，密码走 `MIXCALC_P12_PWD` 环境变量（不落盘、不写进 build-profile.json5）。
+- 第一次带 clean 失败：`hvigor clean` 删 `entry\build` 被拦（`Unable to delete ... may be opened by another program` +
+  批量删除保护），**不是代码问题**；工程配置在 finally 里已自动恢复（`signingConfig: 'default'` 仍在，无 `.bak` 残留）。
+- 第二次 `-SkipClean` 成功：`assembleApp -p buildMode=release --no-codesign` → **BUILD SUCCESSFUL in 6 min 59 s**
+  → `hap-sign-tool sign-app` 用 `D:\mixcalc-sign\mixcalc-release.p12`（别名 `mixcalc`）签出 `.app` 与 `.hap`。
+- 签名校验 `verify-app` → **Verify success**；证书链 `Huawei CBG Root CA G2` → `Developer Relations CA G2` →
+  `CN="夏卫兵(2069877646933652481), Release"`，**不是 debugKey**，符合 AGC 上架要求。
+- 版本 `0.3.6 / 1000306`，bundleName `com.shrimpfarm.mixcalc`，设备类型 phone + tablet。
+- 产物：`dist/mixcalc-0.3.6-release-signed.app`（1.82 MB，**上架只传这个**）、
+  `dist/mixcalc-0.3.6-release-signed.hap`（2.16 MB，装机测试用）、`*.sha256`。
+- 注意：发布签名与手机上的调试签名不同，**不能覆盖安装**，要装 release hap 必须先卸载旧包（会清本地数据）。
+
