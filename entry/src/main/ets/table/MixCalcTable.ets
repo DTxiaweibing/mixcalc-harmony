@@ -653,7 +653,7 @@ export struct MixCalcTable {
   // 棚号列：两行折叠后每行最多 9 个字符，字号必须比正文小一号才塞得进列宽。
   // 对齐安卓「固定字号、不缩放、放不下裁掉」，所以这里给死值，不跟内容自适应。
   private fsShed(): string {
-    return '13vp';
+    return '14vp';
   }
 
   // 自绘光标（数字列没有系统输入框，只能自己闪）

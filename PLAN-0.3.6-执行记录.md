@@ -174,3 +174,19 @@
 > 提醒：这轮改动发生在正式发布包之后，`dist/mixcalc-0.3.6-release-signed.app` 已过期，
 > 用户测试通过后需要**重打一次发布包**再上架。
 
+### 任务 18 · 棚号列字号回调 14vp 并重新打调试包
+- 用户裁决：只需把棚号列字号 `fsShed()` 从 **13vp → 14vp**，其它一律不动
+  （列宽 60vp、`lineHeight 15`、`maxLines 2`、折叠算法、编辑/重置逻辑全部保持原样，均已真机测试通过）。
+- 查证：`fs()` 正文 15vp、`fsHeader()` 表头 14vp、`fsShed()` 是上一轮新加的 13vp；
+  安卓侧 `CellStyle` 正文 16sp、棚号列 `SHED_TEXT_SIZE_DP = 16`，并非「安卓要调小一号」，
+  鸿蒙不需要跟着缩小。
+- 本次 `git diff` 只有 1 行（`return '13vp'` → `return '14vp'`）。
+- 用户清空了 `dist/`，故从空目录重新生成：先删掉 `entry/build/.../entry-default-signed.hap`
+  与 unsigned hap 强制重打，再全量编译。
+- 验收：模型测试 **✓ 344 assertions**；`assembleHap -p buildMode=debug --no-daemon`
+  → **BUILD SUCCESSFUL in 2 min 23 s**；`dist/mixcalc-0.3.6-debug-signed.hap`
+  （2.56 MB，18:32，SHA256 `713FE73BB879A99389D3BC9E2AFB2B44F84165A1A770E97B5F04C744F9D95DAE`）。
+- `hdc tconn 192.168.10.103:42085` → `Connect OK`；`install -r -d` → `install bundle successfully`；
+  `aa force-stop` + `aa start` → `start ability successfully`；`bm dump` 核对 `1000306 / 0.3.6`。
+- 本轮未生成任何截图或界面树文件（用户已清理过一次）。
+
