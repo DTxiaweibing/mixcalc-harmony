@@ -1,6 +1,8 @@
 import { FeedData } from '../model/FeedData';
-import { ownedCounts, ownedSets, findOverLimit, MAX_SHED_NUMBER } from '../model/ShedCoverage';
-import { settleZeroRowData } from '../model/RowSettlement';
+import { ownedSets, findOverLimit, MAX_SHED_NUMBER, renormalize } from '../model/ShedCoverage';
+import { settleZeroRowData, settleRows, RowSettleResult } from '../model/RowSettlement';
+import { recompute, ShedDraftResult } from '../model/ShedDraft';
+import { render as renderShedDisplay } from '../model/ShedDisplay';
 import { t } from '../common/Strings';
 import { promptAction } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
@@ -290,6 +292,10 @@ export struct MixCalcTable {
   private suppressChange: boolean = false;
   private editorCtrl: TextInputController = new TextInputController();
   private lastNextAt: number = 0;
+  // 棚号编辑期快照：进入编辑那一刻每行的“声明原文”，每敲一个字符都从它重推
+  private shedEditActive: boolean = false;
+  private shedEditRow: number = -1;
+  private shedEditSnapshot: string[] = [];
 
   @State colMenuOpen: boolean = false;
   @State colMenuX: number = 0;
@@ -688,7 +694,9 @@ export struct MixCalcTable {
     }
     switch (column) {
       case 0: return (rowIndex + 1).toString();
-      case 1: return row.shedNumber;
+      // 棚号列：显示「实际拥有」的号，按两行极简折叠；不依赖 Text 的自动折行，
+      // 否则系统会按像素把区间从中间切断
+      case 1: return renderShedDisplay(row.getShedDisplay()).join('\n');
       case 2: return row.shedCount === 0 ? '' : Math.round(row.shedCount).toString();
       case 3: return this.formatNumber(row.average);
       case 4: return this.formatNumber(row.fermented);
@@ -853,6 +861,53 @@ export struct MixCalcTable {
     }
   }
 
+  // 每行当前的“声明原文”（不是显示文本）：覆盖/快照只认这个
+  private snapshotShedTexts(): string[] {
+    const texts: string[] = [];
+    for (let i = 0; i < this.rows.length; i++) {
+      texts.push(this.rows[i].shedNumber);
+    }
+    return texts;
+  }
+
+  private beginShedEdit(row: number): void {
+    this.shedEditSnapshot = this.snapshotShedTexts();
+    this.shedEditRow = row;
+    this.shedEditActive = true;
+  }
+
+  private endShedEdit(): void {
+    this.shedEditActive = false;
+    this.shedEditRow = -1;
+    this.shedEditSnapshot = [];
+  }
+
+  /**
+   * 结算并补空行：先按声明文本回收死行，再兜底清 0 棚行，底部补齐总行数。
+   * 只在“离开编辑”的时刻调用；编辑途中绝不删行。
+   */
+  private settleRowsAndPad(emptied: number[]): void {
+    const result: RowSettleResult = settleRows(this.rows, emptied);
+    if (result.removed.length === 0 && !result.changed) {
+      return;
+    }
+    this.editingRow = -1;
+    this.editingCol = -1;
+    this.editRow = -1;
+    this.editCol = -1;
+    this.endShedEdit();
+    this.shedListOpen = false;
+    // 待转池的生命周期在任务 11 接入：任何结算都作废一次待转
+    this.clearPendingTransfer();
+    this.applyShedCoverage();
+    this.version = this.version + 1;
+    this.onChanged();
+  }
+
+  // 待转池（任务 11 实现真实逻辑；先留空，保证行结算处可调用）
+  private clearPendingTransfer(): void {
+  }
+
   private sumBelowFirst(): number {
     let sum: number = 0;
     for (let i = 1; i < this.rows.length; i++) {
@@ -861,23 +916,45 @@ export struct MixCalcTable {
     return sum;
   }
 
-  // 打点覆盖：后一行覆盖前一行的重叠棚号，所有行一视同仁，把实际占有的棚数写回 shedCount。
+  // 打点覆盖：后一行覆盖前一行的重叠棚号，所有行一视同仁。
+  // 声明（shedNumber）永不改写，只写“显示”（shedDisplay）与权威棚数（shedCount）：
+  // 这样下行把号占走后，上行原文还在，下行改小/清空时号能自动退回。
   private applyShedCoverage(): void {
     if (this.rows.length < 1) {
       return;
     }
-    const texts: string[] = [];
-    for (let i = 0; i < this.rows.length; i++) {
-      texts.push(this.rows[i].shedNumber);
+    const texts: string[] = this.snapshotShedTexts();
+    const liveTyping: boolean = this.shedEditActive
+      && this.shedEditSnapshot.length === texts.length
+      && this.shedEditRow >= 0 && this.shedEditRow < texts.length;
+
+    let counts: number[] = [];
+    let canonical: string[] = [];
+    if (liveTyping) {
+      // 编辑中：每帧都从编辑前快照 + 当前这一格的输入重推，
+      // 半成品区间（16-4 被当成 4~16）只影响这一帧，不会永久抢走别人的号
+      const draft: ShedDraftResult = recompute(
+        this.shedEditSnapshot, this.shedEditRow, texts[this.shedEditRow]);
+      counts = draft.counts;
+      canonical = draft.texts;
+    } else {
+      canonical = renormalize(texts);
+      const sets: number[][] = ownedSets(texts);
+      for (let i = 0; i < sets.length; i++) {
+        counts.push(sets[i].length);
+      }
     }
-    const owned: number[] = ownedCounts(texts);
+
     for (let i = 0; i < this.rows.length; i++) {
       const row: FeedData = this.rows[i];
-      const count: number = owned[i];
-      if (row.shedCount !== count) {
+      const oldCount: number = row.shedCount;   // 必须在写显示/棚数之前取
+      const oldAverage: number = row.average;
+      const display: string = i < canonical.length ? canonical[i] : row.shedNumber;
+      row.setShedDisplay(display);
+      const count: number = i < counts.length ? counts[i] : 0;
+      if (oldCount !== count) {
         // 棚数变了：平均不动，料量按“平均 × 新棚数”重算
-        const oldAverage: number = row.average;
-        row.shedCount = count;
+        row.setShedCountDirectly(count);
         if (oldAverage > 0 && row.canEditAverage()) {
           row.setAverageManually(oldAverage, this.fermentedInAverage);
         }
@@ -968,11 +1045,15 @@ export struct MixCalcTable {
       this.editingSeed = '';
       this.editDirty = false;
       this.stopCaret();
+      // 必须先清快照再做定稿重算：否则这一遍会拿旧快照把刚敲的内容回滚掉
+      this.endShedEdit();
       if (wasDirty) {
         this.applyEdit(text, true);
       }
+    } else {
+      this.endShedEdit();
     }
-    this.settleZeroRows();
+    this.settleRowsAndPad([]);
   }
 
   // 数字键盘（自己画，不用系统输入法）：回车键不再由输入法处理，
@@ -1376,7 +1457,6 @@ export struct MixCalcTable {
     if (numbers.length === 0) {
       return;
     }
-    this.finishEdit();
     // 号码块宽度随位数变化：1~2 位是 28vp 圆点，位数多了变胶囊
     // 13vp 粗体一个数字约 6vp 宽（实测 3 位数块宽 30vp），按 6.2 估偏保守一点
     let maxDigits: number = 1;
@@ -1439,9 +1519,14 @@ export struct MixCalcTable {
     }
     // 棚数是按钮：点开看本行实际的棚号列表，不进编辑、不弹键盘
     if (column === 2) {
-      // 点按钮也是离开当前编辑格：提交并结算
+      // 点按钮也是离开当前编辑格：先记对象，结算可能回收行，行下标会平移
+      const targetRef: FeedData = this.rows[row];
       this.finishEdit();
-      this.showShedList(row);
+      const targetIdx: number = this.rows.indexOf(targetRef);
+      if (targetIdx < 0) {
+        return;
+      }
+      this.showShedList(targetIdx);
       return;
     }
     if (!this.isEditableColumn(column)) {
@@ -1471,12 +1556,21 @@ export struct MixCalcTable {
       return;
     }
     // 换格前先把上一格提交掉（对齐安卓 commitInternal，键盘不闪）
+    const targetRef: FeedData = this.rows[row];   // 结算可能删行，先记住对象
+    if (this.shedEditActive) {
+      this.endShedEdit();
+    }
     if (this.editingRow >= 0 && this.editDirty) {
       this.applyEdit(this.editingText, true);
     }
     this.editDirty = false;
-    // 换格 = 上一格失焦：先结算棚数为 0 的行，再打开新格
-    this.settleZeroRows();
+    // 换格 = 上一格失焦：先结算死行并补空行，再打开新格
+    this.settleRowsAndPad([]);
+    const targetIdx: number = this.rows.indexOf(targetRef);
+    if (targetIdx < 0) {
+      return;   // 这一行自己刚被回收，不要再往它上面开编辑器
+    }
+    row = targetIdx;
     this.overLimitWarned = false;
     this.editRow = row;
     this.editCol = column;
@@ -1498,6 +1592,10 @@ export struct MixCalcTable {
     }, 60);
     this.startCaret();
     this.ensureEditorVisible();
+    // 棚号格：拍下全表声明快照，之后每敲一个字符都从快照重推
+    if (column === 1) {
+      this.beginShedEdit(row);
+    }
   }
 
   // ===== 列操作菜单 =====
@@ -1827,7 +1925,8 @@ export struct MixCalcTable {
       .fontWeight(FontWeight.Bold)
       .fontColor(this.cellColor(col))
       .textAlign(TextAlign.Center)
-      // 棚号列：字号固定、不缩放，放不下自动换行（最多 2 行）
+      // 行高固定 18：棚号列两行共 36vp，正好放进 40vp 行高；单行文本也居中
+      .lineHeight(18)
       .maxLines(col === 1 ? 2 : 1)
       .textOverflow({ overflow: col === 1 ? TextOverflow.Clip : TextOverflow.Ellipsis })
       .backgroundColor(this.cellFill(row, col, r))
