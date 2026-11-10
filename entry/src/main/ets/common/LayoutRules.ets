@@ -7,9 +7,9 @@ export const LAYOUT_COLUMN_IDS: string[] = [
 ];
 
 // 手机布局的固定列宽（vp），合计 600：窗口宽度不到 600 时横向滚动
-// 列宽：棚号列 60→72（对齐安卓 0.3.20，保证 9 字符一行约 70vp 不被裁边）
-// 合计 612：窗口宽度不到 612 时横向滚动
-export const LAYOUT_WIDTHS: number[] = [40, 72, 40, 40, 60, 60, 60, 60, 60, 60, 60];
+// 棚号列恢复 0.3.5 的 60vp：和后面 60vp 的列一样宽，列对齐与横向滚动手感不变。
+// 两行棚号显示靠单元格固定 13vp 小字号，不靠加宽列。
+export const LAYOUT_WIDTHS: number[] = [40, 60, 40, 40, 60, 60, 60, 60, 60, 60, 60];
 
 // 平板布局的最小窗口宽度（vp），与安卓 TABLET_MIN_WIDTH_DP 一致
 export const TABLET_MIN_WIDTH: number = 600;

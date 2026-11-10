@@ -150,3 +150,27 @@
   `dist/mixcalc-0.3.6-release-signed.hap`（2.16 MB，装机测试用）、`*.sha256`。
 - 注意：发布签名与手机上的调试签名不同，**不能覆盖安装**，要装 release hap 必须先卸载旧包（会清本地数据）。
 
+### 任务 17 · 真机反馈修复：两行显示被裁 / 棚号清不掉 / 列宽回归
+用户真机测出三个问题，逐条定位并修复：
+
+1. **棚号两行显示被裁成只剩一个「…」**：鸿蒙字体比安卓宽，72vp 配正文 15vp 字号放不下 9 字符行。
+   修法：`fsShed()` 给棚号列单独固定 13vp 字号、`lineHeight` 15，正文列仍 15vp/18。
+2. **所有行的棚号「删除 / 重置」清不掉，杀进程重启才空**：`clearRowData` 直接写 `row.shedNumber = ''`，
+   绕过了 `setShedNumber()`，派生显示串 `shedDisplay` 没被清掉，格子继续显示老棚号；
+   载入 JSON 不含显示串，所以只有重启才正常。
+   修法：`clearRowData` 改走 `row.setShedNumber('')`；`finishEdit` 里棚号格无条件重算一次显示；
+   `resetAll` 收尾清快照 + 重跑打点覆盖 + 全行重算 + 行结算，显示串、棚数、派生值一起归零。
+3. **底部「重置」被横向滚动推到屏幕外**：表尾把重置格从滚动行里拿出来，钉在屏幕右边缘（`position x = viewW - cw(10)`）。
+4. **棚号列宽不对（用户最终裁决）**：中途为塞下两行把 `LAYOUT_WIDTHS[1]` 一路加到 104vp，用户明确要求「改回来」。
+   **恢复 0.3.5 基线 60vp**（`[40, 60, 40, 40, 60, …]`，合计 600），靠 13vp 小字号容纳两行，不靠加宽列。
+   真机 `dumpLayout` 实测：棚号列 180px = 60vp，与 0.5料 / 水20% / 称料 完全一致；序号 / 棚数 / 平均 为 120px = 40vp。
+
+验收：`node scripts/run-model-tests.mjs` → **✓ 344 assertions**；
+`hvigorw assembleHap -p buildMode=debug --no-daemon` → **BUILD SUCCESSFUL in 1 min 52 s**；
+`hdc install -r -d` 覆盖安装到 `192.168.10.103:42085` → `install bundle successfully`，
+`aa force-stop` + `aa start` 后界面正常、无弹窗、重置按钮完整可点（截图 `dist/width-60-final.jpeg`）。
+清理了临时探针 `scripts/model-tests/zz-probe.test.mjs`。
+
+> 提醒：这轮改动发生在正式发布包之后，`dist/mixcalc-0.3.6-release-signed.app` 已过期，
+> 用户测试通过后需要**重打一次发布包**再上架。
+

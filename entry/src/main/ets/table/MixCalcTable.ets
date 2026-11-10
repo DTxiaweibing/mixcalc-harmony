@@ -650,6 +650,12 @@ export struct MixCalcTable {
     return '14vp';
   }
 
+  // 棚号列：两行折叠后每行最多 9 个字符，字号必须比正文小一号才塞得进列宽。
+  // 对齐安卓「固定字号、不缩放、放不下裁掉」，所以这里给死值，不跟内容自适应。
+  private fsShed(): string {
+    return '13vp';
+  }
+
   // 自绘光标（数字列没有系统输入框，只能自己闪）
   private startCaret(): void {
     this.stopCaret();
@@ -881,7 +887,10 @@ export struct MixCalcTable {
 
   private clearRowData(row: FeedData, clearShedNumber: boolean): void {
     if (clearShedNumber) {
-      row.shedNumber = '';
+      // 必须走 setShedNumber：它会同时清掉显示串 shedDisplay。
+      // 以前直接写 shedNumber = ''，显示串留在那儿不清，格子就继续显示老棚号，
+      // 只有杀掉进程从 JSON 重新载入（不含显示串）才会空——「重置清不掉」就是这么来的。
+      row.setShedNumber('');
     }
     row.shedCount = 0;
     row.average = 0;
@@ -1089,6 +1098,7 @@ export struct MixCalcTable {
     if (this.editingRow >= 0 && this.editingCol >= 0) {
       const text: string = this.editingText;
       const wasDirty: boolean = this.editDirty;
+      const wasShed: boolean = this.editingCol === 1;
       this.editingRow = -1;
       this.editingCol = -1;
       this.editingSeed = '';
@@ -1098,6 +1108,12 @@ export struct MixCalcTable {
       this.endShedEdit();
       if (wasDirty) {
         this.applyEdit(text, true);
+      }
+      // 棚号格离开时无条件重算一次显示：只点开又离开（没改）也要保证
+      // 格子里显示的就是当前声明，不会留着上一轮的显示串
+      if (wasShed) {
+        this.recomputeFirstRow();
+        this.version = this.version + 1;
       }
     } else {
       this.endShedEdit();
@@ -2185,6 +2201,14 @@ export struct MixCalcTable {
     for (let i = 0; i < this.rows.length; i++) {
       this.clearRowData(this.rows[i], true);
     }
+    // 清完必须重跑一遍打点覆盖：显示串、棚数、派生值全部归零，
+    // 否则棚号格会留着上一轮的显示文本
+    this.endShedEdit();
+    this.applyShedCoverage();
+    for (let i = 0; i < this.rows.length; i++) {
+      this.rows[i].updateAllCalculations(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
+    }
+    this.settleRowsAndPad([]);
     this.version = this.version + 1;
     this.onChanged();
   }
@@ -2271,12 +2295,13 @@ export struct MixCalcTable {
     Text(this.cellText(row, col, r))
       .width(this.cw(col))
       .height(this.rh())
-      .fontSize(this.fs())
+      // 棚号列用小一号的固定字号：9 字符一行要整行露出来，跟安卓一样不随内容缩放
+      .fontSize(col === 1 ? this.fsShed() : this.fs())
       .fontWeight(FontWeight.Bold)
       .fontColor(this.cellColor(col))
       .textAlign(TextAlign.Center)
-      // 行高固定 18：棚号列两行共 36vp，正好放进 40vp 行高；单行文本也居中
-      .lineHeight(18)
+      // 棚号列两行：行高 15 → 共 30vp，放进 40vp 行高；单行文本也居中
+      .lineHeight(col === 1 ? 15 : 18)
       .maxLines(col === 1 ? 2 : 1)
       .textOverflow({ overflow: col === 1 ? TextOverflow.Clip : TextOverflow.Ellipsis })
       .backgroundColor(this.cellFill(row, col, r))
@@ -2429,7 +2454,10 @@ export struct MixCalcTable {
         Stack({ alignContent: Alignment.TopStart }) {
           Row() {
             ForEach(this.normalIndices(), (col: number) => {
-              this.footerCell(col)
+              // 「重置」单独钉在屏幕右边缘，不跟着表格横向滚动走
+              if (col !== 10) {
+                this.footerCell(col)
+              }
             }, (col: number) => 'f' + col.toString() + '_' + this.version.toString())
           }
           .position({ x: this.frozenWidth() - this.offsetX, y: 0 })
@@ -2440,6 +2468,14 @@ export struct MixCalcTable {
             }, (col: number) => 'ff' + col.toString() + '_' + this.version.toString())
           }
           .zIndex(1)
+
+          // 重置：跟着表格滚动时会被推到屏幕外（只露一条边），点都点不到。
+          // 钉死在右边缘，永远可点。
+          Row() {
+            this.footerCell(10)
+          }
+          .position({ x: Math.max(0, this.viewW - this.cw(10)), y: 0 })
+          .zIndex(2)
         }
         .width('100%')
         .height(this.rh())
