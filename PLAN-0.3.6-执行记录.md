@@ -135,7 +135,7 @@
 - 真机截图核对：棚号两行折叠正常（`10-20 / 22 24 26`、`28…36-46 / …50-60`），棚数 9/14/27 与号码对得上；
   点「棚数」弹出气泡「第 1 行棚号 / 共 9 个 / ⋮」，号码块点选绿底→蓝底生效。
 - 待用户真机复核：⋮ 菜单项（选中后应出现「删除」「转出」）、转出→转入、清空下行看号码是否退回上行。
-- 调试产物：`dist/mixcalc-0.3.6-debug-signed.hap`；截图 `dist/shot-0.3.6.jpeg`、`shot-bubble.jpeg`、`shot-select4.jpeg`。
+- 调试产物：`dist/mixcalc-0.3.6-debug-signed.hap`（真机验证截图已按用户要求清理，不再保留图片文件）。
 
 ### 任务 16 · 打正式发布包（上架用）
 - 用 `scripts/build-release-app.ps1`，密码走 `MIXCALC_P12_PWD` 环境变量（不落盘、不写进 build-profile.json5）。
@@ -168,7 +168,7 @@
 验收：`node scripts/run-model-tests.mjs` → **✓ 344 assertions**；
 `hvigorw assembleHap -p buildMode=debug --no-daemon` → **BUILD SUCCESSFUL in 1 min 52 s**；
 `hdc install -r -d` 覆盖安装到 `192.168.10.103:42085` → `install bundle successfully`，
-`aa force-stop` + `aa start` 后界面正常、无弹窗、重置按钮完整可点（截图 `dist/width-60-final.jpeg`）。
+`aa force-stop` + `aa start` 后界面正常、无弹窗、重置按钮完整可点。
 清理了临时探针 `scripts/model-tests/zz-probe.test.mjs`。
 
 > 提醒：这轮改动发生在正式发布包之后，`dist/mixcalc-0.3.6-release-signed.app` 已过期，
