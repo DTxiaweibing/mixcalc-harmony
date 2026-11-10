@@ -126,3 +126,14 @@
 - 回归：**✓ 344 assertions**；`assembleHap` → **BUILD SUCCESSFUL in 2 min 13 s**。
 - 版本号维持 `0.3.6 / 1000306` 不动（市场当前是 0.3.5，0.3.6 尚未发布，发布时就用 0.3.6）。
 
+### 任务 15 · 打包并推送到手机
+- `hvigorw assembleHap -p product=default -p buildMode=debug` → `entry-default-signed.hap`（debug 自动签名），
+  复制为 `dist/mixcalc-0.3.6-debug-signed.hap`（2.68 MB）。
+- `hdc tconn 192.168.10.103:42085` → Connect OK；`hdc install -r -d` → `install bundle successfully`
+  （中间装过一次 0.3.7 试验包，故带 `-d` 允许降级回 0.3.6）。
+- `bm dump` 核对：`versionCode 1000306 / versionName 0.3.6`；`aa force-stop` + `aa start` 后正常出界面。
+- 真机截图核对：棚号两行折叠正常（`10-20 / 22 24 26`、`28…36-46 / …50-60`），棚数 9/14/27 与号码对得上；
+  点「棚数」弹出气泡「第 1 行棚号 / 共 9 个 / ⋮」，号码块点选绿底→蓝底生效。
+- 待用户真机复核：⋮ 菜单项（选中后应出现「删除」「转出」）、转出→转入、清空下行看号码是否退回上行。
+- 调试产物：`dist/mixcalc-0.3.6-debug-signed.hap`；截图 `dist/shot-0.3.6.jpeg`、`shot-bubble.jpeg`、`shot-select4.jpeg`。
+
