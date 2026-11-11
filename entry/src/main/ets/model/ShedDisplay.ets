@@ -16,11 +16,60 @@
  * 编辑态不走这里：点进格子时编辑浮层加载的仍是完整原始字符串。
  */
 
-// 单行硬上限（字符）。
-const MAX: number = 9;
+// 规则标称的单行硬上限（字符）：两端一致，最多 2 行、绝不爆行。
+const RULE_MAX: number = 9;
 
-/** 把原始棚号文本折叠成 1~2 行展示串。 */
+// ===== 棚号列「按列宽算预算」=====
+// 只作用于棚号列（col 1），其它列的字号与文本规则完全不受影响。
+// 单元格左右边框各 0.5vp，合计 1vp；Text 自身没有 padding，计算时不再额外留内边距。
+export const SHED_BORDER_VP: number = 1;
+// 15vp 粗体半角字符（数字 / 短横 / 空格 / 省略号按 1 字符口径）的实测平均占宽。
+// 来源：1008px 真机截图量得 '7-15' 四字符 = 94px，按 2.85px/vp 换算 = 33vp → 8.25vp/字符。
+export const SHED_CHAR_VP_AT_15: number = 8.25;
+export const SHED_FONT_PRIMARY: number = 15;
+export const SHED_FONT_FALLBACK: number = 14;
+
+/** 单元格实际可用宽度：列宽扣掉左右边框，不留内边距。 */
+export function shedAvailableWidth(columnWidthVp: number): number {
+  const w: number = columnWidthVp - SHED_BORDER_VP;
+  return w > 0 ? w : 1;
+}
+
+/** 指定字号下每行能放几个字符；上限 clamp 到规则标称的 9，只往下调不往上调。 */
+export function shedMaxCharsAt(columnWidthVp: number, fontSizeVp: number): number {
+  const perChar: number = SHED_CHAR_VP_AT_15 * fontSizeVp / SHED_FONT_PRIMARY;
+  const n: number = Math.floor(shedAvailableWidth(columnWidthVp) / perChar);
+  if (n < 1) {
+    return 1;
+  }
+  return n > RULE_MAX ? RULE_MAX : n;
+}
+
+/** 15vp 装得下标称 9 字符就保持 15vp，否则整列降到 14vp（避免同列各行字号跳动）。 */
+export function shedFontSizeVp(columnWidthVp: number): number {
+  return shedMaxCharsAt(columnWidthVp, SHED_FONT_PRIMARY) >= RULE_MAX
+    ? SHED_FONT_PRIMARY : SHED_FONT_FALLBACK;
+}
+
+/** 该列宽下最终采用的每行字符预算。 */
+export function shedMaxChars(columnWidthVp: number): number {
+  return shedMaxCharsAt(columnWidthVp, shedFontSizeVp(columnWidthVp));
+}
+
+/** 按实际列宽折叠（棚号列专用入口）。 */
+export function renderForColumn(rawText: string, columnWidthVp: number): string[] {
+  return renderWithBudget(rawText, shedMaxChars(columnWidthVp));
+}
+
+/** 兼容入口：标称 9 字符预算，模型层回归测试与旧调用方都走这里。 */
 export function render(rawText: string): string[] {
+  return renderWithBudget(rawText, RULE_MAX);
+}
+
+function renderWithBudget(rawText: string, charBudget: number): string[] {
+  // 函数体内所有 MAX 引用都指向这个按列宽算出的预算，不再硬编码 9；
+  // 下限 3 是为了避免极窄列让省略号预留位算出负数。
+  const MAX: number = Math.max(3, Math.floor(charBudget));
   const lines: string[] = [];
   // Java 的空引用判断用「非字符串」一并挡掉，此处全程不引入空值字面量
   if (typeof rawText !== 'string' || rawText.trim().length === 0) {
@@ -105,7 +154,7 @@ export function render(rawText: string): string[] {
       // 区间就在最前：行1 让它带头，行2 接后面的散号
       lines.push(n > 1 ? mid + '…' : mid);
       if (n > 1) {
-        lines.push(ellipsizedTail(items, 1, n, ''));
+        lines.push(ellipsizedTail(items, 1, n, '', MAX));
       }
       return lines;
     }
@@ -122,7 +171,7 @@ export function render(rawText: string): string[] {
       }
     }
     lines.push(join(beforeItems) + '…');
-    lines.push(ellipsizedTail(items, firstR + 1, n, mid));
+    lines.push(ellipsizedTail(items, firstR + 1, n, mid, MAX));
     return lines;
   }
 
@@ -232,7 +281,7 @@ function tokenize(rawText: string): string[] {
  * 折叠行的后半段：可选的「头一个项」（通常是区间），再从 from 到 to-1 贪心塞散号；
  * 没塞完就在末尾补一个 …。整体不超过单行上限。
  */
-function ellipsizedTail(items: string[], from: number, to: number, head: string): string {
+function ellipsizedTail(items: string[], from: number, to: number, head: string, maxChars: number): string {
   let sb: string = '…';
   if (head.length > 0) {
     sb += head;
@@ -242,7 +291,7 @@ function ellipsizedTail(items: string[], from: number, to: number, head: string)
     // 省略号紧贴第一个项（没有 head 时不加空格），与 B-2 的 "…25-32" 风格一致
     const sep: string = sb.length > 1 ? ' ' : '';
     const candidate: string = sb + sep + items[i];
-    if (candidate.length + 1 <= MAX) { // 预留末尾省略号的 1 字符
+    if (candidate.length + 1 <= maxChars) { // 预留末尾省略号的 1 字符
       sb += sep + items[i];
     } else {
       clipped = true;

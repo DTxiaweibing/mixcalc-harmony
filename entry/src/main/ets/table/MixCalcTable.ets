@@ -2,7 +2,7 @@ import { FeedData } from '../model/FeedData';
 import { ownedSets, findOverLimit, MAX_SHED_NUMBER, renormalize } from '../model/ShedCoverage';
 import { settleZeroRowData, settleRows, RowSettleResult } from '../model/RowSettlement';
 import { recompute, ShedDraftResult } from '../model/ShedDraft';
-import { render as renderShedDisplay } from '../model/ShedDisplay';
+import { renderForColumn, shedFontSizeVp } from '../model/ShedDisplay';
 import { transfer, giveDown, remove as removeShedNumbers, pointlessWholeRowMove, normalize as normalizeShedNumbers } from '../model/ShedText';
 import { ShedDeletePlan } from '../model/ShedDeletePlan';
 import { t } from '../common/Strings';
@@ -651,10 +651,10 @@ export struct MixCalcTable {
     return '14vp';
   }
 
-  // 棚号列固定 15vp：比正文小 1vp，不跟安卓 16dp 硬对齐（鸿蒙字体更宽，16vp 时显示异常）。
-  // 列宽 72vp：68vp 在部分机型上两行棚号显示异常，放宽兼容。
+  // 棚号列字号按实际列宽算：72vp 扣掉 1vp 边框只剩 71vp，15vp 下装不满标称 9 字符，
+  // 整列降到 14vp；列宽足够时自动回到 15vp。只影响这一列，正文 / 表头一律不动。
   private fsShed(): string {
-    return '15vp';
+    return shedFontSizeVp(this.cw(1)) === 15 ? '15vp' : '14vp';
   }
 
   // 自绘光标（数字列没有系统输入框，只能自己闪）
@@ -744,9 +744,9 @@ export struct MixCalcTable {
     }
     switch (column) {
       case 0: return (rowIndex + 1).toString();
-      // 棚号列：显示「实际拥有」的号，按两行极简折叠；不依赖 Text 的自动折行，
-      // 否则系统会按像素把区间从中间切断
-      case 1: return renderShedDisplay(row.getShedDisplay()).join('\n');
+      // 棚号列：显示「实际拥有」的号，按实际列宽算出的字符预算做两行极简折叠；
+      // 不依赖 Text 的自动折行，否则系统会按像素把区间从中间切断
+      case 1: return renderForColumn(row.getShedDisplay(), this.cw(1)).join('\n');
       case 2: return row.shedCount === 0 ? '' : Math.round(row.shedCount).toString();
       case 3: return this.formatNumber(row.average);
       case 4: return this.formatNumber(row.fermented);
@@ -2296,7 +2296,7 @@ export struct MixCalcTable {
     Text(this.cellText(row, col, r))
       .width(this.cw(col))
       .height(this.rh())
-      // 棚号列用固定 15vp 字号（不随内容缩放）：9 字符一行靠 72vp 列宽 + 两行折叠容纳
+      // 棚号列字号与字符预算同源（shedFontSizeVp / renderForColumn），按实际列宽自适应
       .fontSize(col === 1 ? this.fsShed() : this.fs())
       .fontWeight(FontWeight.Bold)
       .fontColor(this.cellColor(col))
