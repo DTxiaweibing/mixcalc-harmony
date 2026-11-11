@@ -32,8 +32,10 @@ export default class EntryAbility extends UIAbility {
       console.error('getMainWindowSync failed: ' + e);
       return;
     }
-    // module.json5 先按竖屏创建启动窗口，手机（含折叠屏单屏态）不会先横后竖闪一下；
-    // 平板在这里改回自动旋转，横屏竖屏都用满窗口宽度。
+    // 静态方向声明保持 auto_rotation：平板运行中旋转必须由系统正常重建窗口。
+    // 曾经把 module.json5 写成 portrait 再靠这里给平板补 AUTO_ROTATION，
+    // 冷启动横/竖都正常，但转屏时系统按静态 portrait 把窗口压成竖屏窄条居中。
+    // 手机（含折叠屏单屏态）在这里锁 PORTRAIT，仍在加载内容之前完成。
     const isPhone: boolean = deviceInfo.deviceType === 'phone';
     win.setPreferredOrientation(
       isPhone ? window.Orientation.PORTRAIT : window.Orientation.AUTO_ROTATION

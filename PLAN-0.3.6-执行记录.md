@@ -365,3 +365,59 @@ SHA256 `b76dca4691acb68bd9e723ac3c69b303f101f30f451a8077b122d04ca9980cf1`
 仍是过期产物，不可直接上架）。若平台要求 `.app` 包或正式签名而非 debug 签名 HAP，
 需按平台要求补打。
 
+## 任务 24：云调试反馈 —— 回退 68vp/15vp + 修复平板转屏（11-11 08:41-08:55）
+
+用户云调试实测反馈两条：
+1. 多机型比较下来**棚号列宽 68vp + 字号 15vp 最稳定**；
+2. **平板运行中旋转**时界面「竖在屏幕中间像一个手机一样」；冷启动横屏 / 竖屏都正常，
+   0.3.5 发布版从未出现。
+
+**诊断（与 0.3.5 基线 `d521e50` 逐行对比）**：
+- `Index.ets` 的宽度链路（根布局 `onAreaChange` → `applyWindowWidth` → `tableWidth`）、
+  `MixCalcTable` 的 `isTabletMode()` / `ensureWidths()` / `applyViewSize()` 相对 0.3.5
+  **完全没有改动**，排除表格布局逻辑。
+- `entry/src/main/module.json5` 是唯一方向相关的实质差异：
+  0.3.5 首版 `orientation: auto_rotation` / `["fullscreen"]`；
+  现版 `orientation: portrait` / `["fullscreen","split"]`。
+- 追溯提交：`585b439`（11-02 20:19，在 0.3.5 首次出包 `d521e50` 19:51 之后）
+  为消除手机启动「先横后竖闪一下」把静态方向改成 `portrait`，
+  平板改由 `EntryAbility.applyWindowSetup()` 运行时补 `AUTO_ROTATION`。
+- **根因**：冷启动时运行时那次 `setPreferredOrientation(AUTO_ROTATION)` 生效，
+  所以横屏/竖屏冷启动都正常；但**运行中旋转是配置变更**，系统按 Ability 的静态
+  `orientation: portrait` 重新约束/重建窗口 → 平板横屏下出现竖屏窄窗口居中。
+  运行时补方向覆盖不了静态声明，这就是「只有转屏出问题」。
+
+**改动清单（5 个文件，均最小改动）**：
+1. `module.json5`：`orientation` `portrait` → **`auto_rotation`**（恢复 0.3.5 首版）。
+   `supportWindowMode: ["fullscreen","split"]` 与平板启动 `maximize()` **未动**，分屏能力保留。
+2. `EntryAbility.ets`：只同步注释，说明静态方向为何必须 auto_rotation；
+   手机仍在 `loadContent` 前由 `setPreferredOrientation(PORTRAIT)` 锁竖屏，逻辑未改。
+3. `LayoutRules.ets`：`LAYOUT_WIDTHS[1]` 72 → **68**，总宽 612 → **608**，注释同步。
+4. `MixCalcTable.ets`：`fsShed()` 16vp → **15vp**，两处注释同步。
+5. `scripts/model-tests/layout-rules.test.mjs`：列宽 / 总宽断言 72·612 → 68·608，
+   平板边界断言 611 → **607**（贴合 608 总宽前的缝隙），保留 600/612/800 与隐藏列断言。
+
+**刻意未动**：正文 `fs()` 仍 **16vp**（用户任务 22 明确要求对齐安卓 16sp）、表头 14vp、
+`fillsAllColumns` 的平板分支（任务 22 修复保留）、两行折叠算法、编辑/清空/重置/来路逻辑、
+版本 `0.3.6 / 1000306`。若用户希望正文也回 15vp 需另行确认。
+
+**验收**：模型测试 **✓ 360 assertions**；
+`assembleHap` → **BUILD SUCCESSFUL in 2 min 17 s**（`CompileArkTS` 实跑 1m10s，
+非缓存命中；仅既有 ArkTS 告警）；
+新包 `dist/mixcalc-0.3.6-debug-signed.hap` 2,686,124 B，
+SHA256 `1ad9a646b8d10d280e48cd97cb8cbd7ff28d67ecde1536e08bcb2b71c998f042`；
+包内 `module.json` 校验 `orientation: auto_rotation` / `supportWindowMode: [fullscreen,split]`
+/ `0.3.6 / 1000306`，`modules.abc` 可检索 `15vp` 标记；
+`install -r -d` → `force-stop` + `start` → `bm dump` 核对 0.3.6，进程 9082。
+`dist/` 仍只有这一个包，无截图 / 界面树等冗余产物。
+
+**云调试复测重点**：
+1. 平板横屏启动 → 转竖屏 → 再转回横屏，反复几次，界面是否始终铺满、不再出现竖屏窄条居中；
+2. 手机冷启动是否仍稳在竖屏（静态方向回退后，重点看会不会重现「先横后竖闪一下」）；
+3. 68vp / 15vp 下棚号两行是否完整、正文 16vp 是否裁切；
+4. 分屏 / 悬浮窗进出、600~607vp 窗口下「快捷设置」入口。
+
+**遗留**：`docs/harmony-tablet-adaptation-notes.md`、`docs/huawei-cloud-test-guide.md`、
+`CHANGELOG` 里仍写着 `orientation: portrait` 的旧方案，等云调试验证通过后再统一更新，
+本轮未擅自改历史文档。正式发布包依旧过期，定稿后重打。
+

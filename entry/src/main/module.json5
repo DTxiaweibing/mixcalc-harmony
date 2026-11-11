@@ -17,7 +17,7 @@
         "label": "$string:EntryAbility_label",
         "startWindowIcon": "$media:start_transparent",
         "startWindowBackground": "$color:start_window_background",
-        "orientation": "portrait",
+        "orientation": "auto_rotation",
         "supportWindowMode": ["fullscreen", "split"],
         "exported": true,
         "skills": [
