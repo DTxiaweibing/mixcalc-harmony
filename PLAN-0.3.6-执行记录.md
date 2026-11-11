@@ -421,3 +421,31 @@ SHA256 `1ad9a646b8d10d280e48cd97cb8cbd7ff28d67ecde1536e08bcb2b71c998f042`；
 `CHANGELOG` 里仍写着 `orientation: portrait` 的旧方案，等云调试验证通过后再统一更新，
 本轮未擅自改历史文档。正式发布包依旧过期，定稿后重打。
 
+## 任务 25：转屏修复验证通过，棚号列宽放宽到 72vp（11-11 10:57-11:05）
+
+用户云调试复测反馈：**旋转没问题了**（任务 24 的 `auto_rotation` 修复有效）；
+但 68vp 列宽「有些手机显示有问题」，虽然本机正常 → 要求**棚号列宽放回 72vp**。
+
+**改动（仅列宽一个数值 + 同步注释/断言，共 3 文件）**：
+1. `LayoutRules.ets`：`LAYOUT_WIDTHS[1]` 68 → **72**，固定总宽 608 → **612**，
+   注释说明放宽原因（多机型兼容，本机 68vp 正常但其它机型两行棚号异常）。
+2. `MixCalcTable.ets`：两处提到「68vp 列宽」的注释同步为 72vp，`fsShed()` **仍 15vp**。
+3. `layout-rules.test.mjs`：列宽 / 总宽断言 68·608 → 72·612，
+   平板边界断言 607 → **611**（贴合 612 总宽前的缝隙），保留 600/612/800 与隐藏列断言。
+
+**刻意未动**：棚号字号 15vp、正文 16vp、表头 14vp、`orientation: auto_rotation`（已验证通过）、
+`fillsAllColumns` 平板分支、两行折叠、棚号账本逻辑、版本 `0.3.6 / 1000306`。
+最终组合：**棚号列 72vp + 字号 15vp**（列宽与已发布安卓 72dp 一致，字号不照搬 16dp）。
+
+**验收**：模型测试 **✓ 360 assertions**；
+`assembleHap` → **BUILD SUCCESSFUL in 2 min 9 s**（`CompileArkTS` 实跑 1m5s，仅既有告警）；
+新包 `dist/mixcalc-0.3.6-debug-signed.hap` 2,686,124 B，
+SHA256 `84c17e0d12919906a396360c39e1b88285bd85847abc9f887fc011c8972737c2`
+（与上一版 `1ad9a646…f042` 不同）；
+包内 `module.json` 复核 `orientation: auto_rotation` / `0.3.6 / 1000306`；
+`install -r -d` → `force-stop` + `start` → `bm dump` 核对 0.3.6，进程 60358。
+`dist/` 只有这一个包，无截图等冗余产物。
+
+**遗留**：三份文档中的旧 `portrait` 方案描述仍待更新 —— 显示参数仍在逐档微调，
+等整体定稿后一次性统一改，避免文档反复改。正式发布包依旧过期，定稿后重打。
+

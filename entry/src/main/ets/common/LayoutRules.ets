@@ -6,11 +6,11 @@ export const LAYOUT_COLUMN_IDS: string[] = [
   'feed03', 'feed05', 'feed10', 'water', 'weighed_feed'
 ];
 
-// 手机布局的固定列宽（vp），合计 608：窗口宽度不到 608 时横向滚动
-// 棚号列 68vp + 展示字号 15vp：云调试多机型实测这一档最稳定（两行 9 字符完整、不裁字）。
-// 不再与已发布安卓（72dp / 16dp）硬对齐：鸿蒙字体比安卓宽，数值照搬反而显示异常。
-// 其余列保持 0.3.5 基线不变。
-export const LAYOUT_WIDTHS: number[] = [40, 68, 40, 40, 60, 60, 60, 60, 60, 60, 60];
+// 手机布局的固定列宽（vp），合计 612：窗口宽度不到 612 时横向滚动
+// 棚号列 72vp + 展示字号 15vp：云调试多机型复测，68vp 在部分手机上两行棚号显示异常，
+// 放宽到 72vp 兼容（与已发布安卓 72dp 一致）；字号仍保持 15vp，不照搬安卓 16dp，
+// 因为鸿蒙字体比安卓宽，16vp 时显示会出问题。其余列保持 0.3.5 基线不变。
+export const LAYOUT_WIDTHS: number[] = [40, 72, 40, 40, 60, 60, 60, 60, 60, 60, 60];
 
 // 平板布局的最小窗口宽度（vp），与安卓 TABLET_MIN_WIDTH_DP 一致
 export const TABLET_MIN_WIDTH: number = 600;
@@ -32,14 +32,14 @@ export function fillsAllColumns(visible: boolean[], widthVp: number): boolean {
     }
   }
   // 平板 / 宽窗口布局（>=600vp，含横屏平板）会把可见列整体缩放到窗宽，
-  // 全可见时必然铺满，与固定列宽总和（608vp）无关。
+  // 全可见时必然铺满，与固定列宽总和（612vp）无关。
   // 判据与 MixCalcTable.isTabletMode() 同源（同一个 isTabletWidth / TABLET_MIN_WIDTH），
   // 依据的是鸿蒙自身的缩放逻辑，不是照搬安卓的竖屏假设：鸿蒙横屏平板 >=600vp 走缩放，
   // 竖屏手机 <600vp 仍按固定列宽横向滚动。两端平台形态不同，这里只对齐鸿蒙自己。
   if (isTabletWidth(widthVp)) {
     return true;
   }
-  // 手机布局：固定列宽总和 608vp，窗口放不下就还要横向滚动，入口必须留着。
+  // 手机布局：固定列宽总和 612vp，窗口放不下就还要横向滚动，入口必须留着。
   let total: number = 0;
   for (let i = 0; i < LAYOUT_WIDTHS.length; i++) {
     total += LAYOUT_WIDTHS[i];

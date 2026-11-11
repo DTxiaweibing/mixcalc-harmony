@@ -651,8 +651,8 @@ export struct MixCalcTable {
     return '14vp';
   }
 
-  // 棚号列固定 15vp：云调试多机型实测 15vp + 68vp 这一档两行 9 字符最稳，
-  // 比正文小 1vp，不跟安卓 16dp 硬对齐（鸿蒙字体更宽，16vp 时显示异常）。
+  // 棚号列固定 15vp：比正文小 1vp，不跟安卓 16dp 硬对齐（鸿蒙字体更宽，16vp 时显示异常）。
+  // 列宽 72vp：68vp 在部分机型上两行棚号显示异常，放宽兼容。
   private fsShed(): string {
     return '15vp';
   }
@@ -2296,7 +2296,7 @@ export struct MixCalcTable {
     Text(this.cellText(row, col, r))
       .width(this.cw(col))
       .height(this.rh())
-      // 棚号列用固定 15vp 字号（不随内容缩放）：9 字符一行靠 68vp 列宽 + 两行折叠容纳
+      // 棚号列用固定 15vp 字号（不随内容缩放）：9 字符一行靠 72vp 列宽 + 两行折叠容纳
       .fontSize(col === 1 ? this.fsShed() : this.fs())
       .fontWeight(FontWeight.Bold)
       .fontColor(this.cellColor(col))

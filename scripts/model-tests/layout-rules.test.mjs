@@ -22,11 +22,11 @@ function loadModel(name) {
 export default function run(t) {
   const R = loadModel('LayoutRules');
 
-  // 列宽：云调试多机型实测最稳的一档（棚号 15vp 字号 + 68vp 列宽）
+  // 列宽：棚号 15vp 字号 + 72vp 列宽（68vp 在部分机型显示异常，放宽兼容）
   t.equal(R.LAYOUT_WIDTHS.length, 11, '列数 11');
-  t.equal(R.LAYOUT_WIDTHS[1], 68, '棚号列 68vp（云调试实测最稳）');
+  t.equal(R.LAYOUT_WIDTHS[1], 72, '棚号列 72vp（多机型兼容）');
   const total = R.LAYOUT_WIDTHS.reduce((a, b) => a + b, 0);
-  t.equal(total, 608, '固定列宽总和 608vp');
+  t.equal(total, 612, '固定列宽总和 612vp');
   t.equal(R.TABLET_MIN_WIDTH, 600, '平板阈值 600vp');
 
   const all = new Array(11).fill(true);
@@ -37,14 +37,14 @@ export default function run(t) {
   t.equal(R.isTabletWidth(599), false, '599vp 不是平板');
   t.equal(R.isTabletWidth(600), true, '600vp 进入平板');
 
-  // 手机模式：固定 608vp 放不下，还要横向滚动，快捷设置入口必须留着
+  // 手机模式：固定 612vp 放不下，还要横向滚动，快捷设置入口必须留着
   t.equal(R.fillsAllColumns(all, 360), false, '手机 360vp 未铺满');
   t.equal(R.fillsAllColumns(all, 599), false, '599vp 未铺满');
 
-  // 平板 / 横屏：列已缩放到窗宽，全可见即铺满，与固定总宽 608 无关
+  // 平板 / 横屏：列已缩放到窗宽，全可见即铺满，与固定总宽 612 无关
   t.equal(R.fillsAllColumns(all, 600), true, '600vp 平板已铺满');
-  t.equal(R.fillsAllColumns(all, 607), true, '607vp 平板已铺满（608 总宽前的边界）');
-  t.equal(R.fillsAllColumns(all, 612), true, '612vp（已超 608 总宽）仍铺满');
+  t.equal(R.fillsAllColumns(all, 611), true, '611vp 平板已铺满（612 总宽前的边界）');
+  t.equal(R.fillsAllColumns(all, 612), true, '612vp 已铺满');
   t.equal(R.fillsAllColumns(all, 800), true, '横屏平板 800vp 已铺满');
 
   // 有列被隐藏时入口必须保留，无论窗口多宽
