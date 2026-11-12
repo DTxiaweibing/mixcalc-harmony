@@ -2,7 +2,7 @@ import { FeedData } from '../model/FeedData';
 import { ownedSets, findOverLimit, MAX_SHED_NUMBER, renormalize } from '../model/ShedCoverage';
 import { settleZeroRowData, settleRows, RowSettleResult } from '../model/RowSettlement';
 import { recompute, ShedDraftResult } from '../model/ShedDraft';
-import { renderForMode, shedFontSizeForMode, shedMaxCharsForMode } from '../model/ShedDisplay';
+import { renderForMode, shedFontSizeForMode } from '../model/ShedDisplay';
 import { transfer, giveDown, remove as removeShedNumbers, pointlessWholeRowMove, normalize as normalizeShedNumbers } from '../model/ShedText';
 import { ShedDeletePlan } from '../model/ShedDeletePlan';
 import { t } from '../common/Strings';
@@ -765,12 +765,6 @@ export struct MixCalcTable {
         const rawShed: string = row.getShedDisplay();
         const allVisible: boolean = this.shedAllColumnsVisible();
         const shedLines: string[] = renderForMode(rawShed, allVisible);
-        // 诊断日志：把送入折叠算法前的原始字符串原样打出来，便于核对真机数据
-        if (rawShed.length > 0) {
-          console.info('[ShedRaw] r=' + rowIndex + ' full=' + allVisible +
-            ' fs=' + this.fsShed() + ' budget=' + shedMaxCharsForMode(allVisible) +
-            ' raw=[' + rawShed + '] out=' + JSON.stringify(shedLines));
-        }
         return shedLines.join('\n');
       }
       case 2: return row.shedCount === 0 ? '' : Math.round(row.shedCount).toString();
@@ -2673,8 +2667,6 @@ export struct MixCalcTable {
             // 不结算、不关编辑器；回到前台由 WINDOW_ACTIVE 把焦点还回来。
             const touchDelta: number = Date.now() - this.lastUserTouchAt;
             const userTappedAway: boolean = this.windowActive && touchDelta < 800;
-            console.info('[ShedBlur] active=' + this.windowActive.toString() +
-              ' touchDelta=' + touchDelta.toString() + ' settle=' + userTappedAway.toString());
             if (!userTappedAway) {
               this.blurSkipped = true;
               return;
