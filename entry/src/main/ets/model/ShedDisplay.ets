@@ -12,6 +12,9 @@
  *
  * 执行分支（命中即返回）：A-1 单行全显示 → A-2 两行全显示 →
  * B-1 散点截断（无 Range 时）→ B-2 双 Range 紧凑折叠截断。
+ * A-2 取所有可行切分里首行最接近 total/2 的，平手偏短首行；
+ * B-2 首行在首个区间后贪心补中间词，中间词全部露出时第二行不再加前导省略号；
+ * B-1 省略号紧贴数字，省下的一字符多露一个号。
  *
  * 编辑态不走这里：点进格子时编辑浮层加载的仍是完整原始字符串。
  */
@@ -45,10 +48,34 @@ export function shedMaxCharsAt(columnWidthVp: number, fontSizeVp: number): numbe
   return n > RULE_MAX ? RULE_MAX : n;
 }
 
-/** 15vp 装得下标称 9 字符就保持 15vp，否则整列降到 14vp（避免同列各行字号跳动）。 */
+// ===== 棚号列「按是否铺满定档」（应用 UI 走这一套）=====
+// 用户定档：11 列全部显示（窗口 >=600vp，列缩放到铺满、无需横向滚动）
+//   → 15vp / 每行 9 字符；
+// 需要横向滚动的手机布局（固定列宽合计 604vp，棚号列 64vp）
+//   → 14vp / 每行 7 字符。
+// 字号与字符预算必须同源，否则会出现「按 9 字符排版却用 14vp 画」或反之。
+export const SHED_MAX_CHARS_FULL: number = RULE_MAX;
+export const SHED_MAX_CHARS_SCROLL: number = 7;
+
+/** 全列铺满用 15vp，滚动布局用 14vp。整列统一，不按行浮动。 */
+export function shedFontSizeForMode(allColumnsVisible: boolean): number {
+  return allColumnsVisible ? SHED_FONT_PRIMARY : SHED_FONT_FALLBACK;
+}
+
+/** 全列铺满 9 字符，滚动布局 7 字符。 */
+export function shedMaxCharsForMode(allColumnsVisible: boolean): number {
+  return allColumnsVisible ? SHED_MAX_CHARS_FULL : SHED_MAX_CHARS_SCROLL;
+}
+
+/** 应用 UI 的棚号列入口：字号与预算同取一个模式判据。 */
+export function renderForMode(rawText: string, allColumnsVisible: boolean): string[] {
+  return renderWithBudget(rawText, shedMaxCharsForMode(allColumnsVisible));
+}
+
+// ===== 列宽口径兼容入口（只读测算脚本 / 回归测试用，应用 UI 不再调用）=====
+// 保留按列宽算预算的能力，便于离线评估不同列宽档位；此时字号按 14vp 口径计算。
 export function shedFontSizeVp(columnWidthVp: number): number {
-  return shedMaxCharsAt(columnWidthVp, SHED_FONT_PRIMARY) >= RULE_MAX
-    ? SHED_FONT_PRIMARY : SHED_FONT_FALLBACK;
+  return SHED_FONT_FALLBACK;
 }
 
 /** 该列宽下最终采用的每行字符预算。 */
@@ -91,13 +118,26 @@ function renderWithBudget(rawText: string, charBudget: number): string[] {
     return lines;
   }
 
-  // A-2 两行全显示（无省略号）
+  // A-2 两行全显示（无省略号）：在所有可行切分里挑首行长度最接近总长一半的，
+  // 平手时保留更靠前的切分（首行更短），避免把 1-3 5 / 7 9 11 挤成 1-3 5 7 / 9 11。
+  // 旧做法是「第一个可行切分即返回」，1-3 / 5 7-15 这类头轻脚重的排布由此而来。
+  let bestK: number = -1;
+  let bestDiff: number = total + 1;
+  const half: number = total / 2;
   for (let k = 1; k < n; k++) {
-    if (disp(items.slice(0, k)) <= MAX && disp(items.slice(k, n)) <= MAX) {
-      lines.push(join(items.slice(0, k)));
-      lines.push(join(items.slice(k, n)));
-      return lines;
+    const headLen: number = disp(items.slice(0, k));
+    if (headLen <= MAX && disp(items.slice(k, n)) <= MAX) {
+      const diff: number = Math.abs(headLen - half);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestK = k;
+      }
     }
+  }
+  if (bestK > 0) {
+    lines.push(join(items.slice(0, bestK)));
+    lines.push(join(items.slice(bestK, n)));
+    return lines;
   }
 
   // 找出所有 Range 的下标
@@ -108,7 +148,7 @@ function renderWithBudget(rawText: string, charBudget: number): string[] {
     }
   }
 
-  // B-1 散点截断：第一行从头贪心，第二行从尾部倒推、头部加 "… "
+  // B-1 散点截断：第一行从头贪心，第二行从尾部倒推、头部加 "…"（紧贴数字，不留空格）
   if (ridx.length === 0) {
     let firstItems: string[] = [];
     for (let i = 0; i < n; i++) {
@@ -129,14 +169,14 @@ function renderWithBudget(rawText: string, charBudget: number): string[] {
       for (let j = 0; j < lastItems.length; j++) {
         next.push(lastItems[j]);
       }
-      if (disp(next) <= MAX - 2) { // 预留 "… " 头部 2 字符
+      if (disp(next) <= MAX - 1) { // 预留 "…" 头部 1 字符
         lastItems = next;
       } else {
         break;
       }
     }
     lines.push(join(firstItems));
-    lines.push('… ' + join(lastItems));
+    lines.push('…' + join(lastItems));
     return lines;
   }
 
@@ -187,10 +227,25 @@ function renderWithBudget(rawText: string, charBudget: number): string[] {
       break;
     }
   }
-  const firstLine: string = front.length === 0 ? head : join(front) + '…' + head;
+  // 首行在首个区间之后继续贪心补中间词（不越过尾部区间）：
+  // 1-3 / …21-30… 改成 1-3 5 / …21-30…，首行信息量用足。
+  let firstLine: string = front.length === 0 ? head : join(front) + '…' + head;
+  let covered: number = firstR;
+  for (let i = firstR + 1; i < lastR; i++) {
+    const candidate: string = firstLine + ' ' + items[i];
+    if (candidate.length <= MAX) {
+      firstLine = candidate;
+      covered = i;
+    } else {
+      break;
+    }
+  }
 
   const tailRange: string = items[lastR];
-  const secondLine: string = '…' + tailRange + (lastR < n - 1 ? '…' : '');
+  // 首行已把尾部区间之前的词全部露出时，第二行紧接首行，不再加前导省略号
+  // （1-3 5 / 7-15…）；中间确有折叠内容才用 … 起头（…21-30… / …21-22）。
+  const leadEllipsis: string = covered === lastR - 1 ? '' : '…';
+  const secondLine: string = leadEllipsis + tailRange + (lastR < n - 1 ? '…' : '');
   lines.push(firstLine);
   lines.push(secondLine);
   return lines;

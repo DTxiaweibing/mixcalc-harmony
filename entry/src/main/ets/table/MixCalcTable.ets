@@ -2,11 +2,11 @@ import { FeedData } from '../model/FeedData';
 import { ownedSets, findOverLimit, MAX_SHED_NUMBER, renormalize } from '../model/ShedCoverage';
 import { settleZeroRowData, settleRows, RowSettleResult } from '../model/RowSettlement';
 import { recompute, ShedDraftResult } from '../model/ShedDraft';
-import { renderForColumn, shedFontSizeVp } from '../model/ShedDisplay';
+import { renderForMode, shedFontSizeForMode, shedMaxCharsForMode } from '../model/ShedDisplay';
 import { transfer, giveDown, remove as removeShedNumbers, pointlessWholeRowMove, normalize as normalizeShedNumbers } from '../model/ShedText';
 import { ShedDeletePlan } from '../model/ShedDeletePlan';
 import { t } from '../common/Strings';
-import { promptAction } from '@kit.ArkUI';
+import { promptAction, window } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
 import { LAYOUT_COLUMN_IDS, LAYOUT_WIDTHS, isTabletWidth, rightAlignedX } from '../common/LayoutRules';
 
@@ -298,6 +298,14 @@ export struct MixCalcTable {
   private editorOpenedAt: number = 0;
   // 程序化改文本（换格塞初值）时压住 onChange，不然一换格就当用户输入提交了
   private suppressChange: boolean = false;
+  // 对齐安卓 CellEditorOverlay：EditText 不监听焦点，end() 只由用户主动触摸触发。
+  // 鸿蒙 TextInput 对任何失焦都会回调 onBlur，系统截屏 / 通知栏 / 切后台造成的
+  // 窗口级失焦不能当成「离开单元格」，否则一截屏就结算、编辑框消失，屏也截不到。
+  private windowActive: boolean = true;
+  private lastUserTouchAt: number = 0;
+  // 上一次 onBlur 是系统级失焦、被挡下没结算：用户回来第一次触摸要把焦点还回去，
+  // 否则输入框已经 blur 过，之后再点别处不会触发 onBlur，会漏掉结算
+  private blurSkipped: boolean = false;
   private editorCtrl: TextInputController = new TextInputController();
   private lastNextAt: number = 0;
   // 棚号编辑期快照：进入编辑那一刻每行的“声明原文”，每敲一个字符都从它重推
@@ -651,10 +659,17 @@ export struct MixCalcTable {
     return '14vp';
   }
 
-  // 棚号列字号按实际列宽算：72vp 扣掉 1vp 边框只剩 71vp，15vp 下装不满标称 9 字符，
-  // 整列降到 14vp；列宽足够时自动回到 15vp。只影响这一列，正文 / 表头一律不动。
+  // 棚号列分档判据：窗口 >=600vp 时 11 列缩放铺满、不需要横向滚动；
+  // 与 LayoutRules.fillsAllColumns / isTabletWidth 同源。
+  // 字号和字符预算必须取同一个值，不能一个按列宽、一个按模式。
+  private shedAllColumnsVisible(): boolean {
+    return this.isTabletMode();
+  }
+
+  // 列全部显示 → 15vp / 9 字符；列滚动显示 → 14vp / 7 字符。
+  // 整列统一、不按行浮动；只影响这一列，正文 / 表头一律不动。
   private fsShed(): string {
-    return shedFontSizeVp(this.cw(1)) === 15 ? '15vp' : '14vp';
+    return shedFontSizeForMode(this.shedAllColumnsVisible()) === 15 ? '15vp' : '14vp';
   }
 
   // 自绘光标（数字列没有系统输入框，只能自己闪）
@@ -744,9 +759,20 @@ export struct MixCalcTable {
     }
     switch (column) {
       case 0: return (rowIndex + 1).toString();
-      // 棚号列：显示「实际拥有」的号，按实际列宽算出的字符预算做两行极简折叠；
-      // 不依赖 Text 的自动折行，否则系统会按像素把区间从中间切断
-      case 1: return renderForColumn(row.getShedDisplay(), this.cw(1)).join('\n');
+      // 棚号列：显示「实际拥有」的号，按「铺满 9 字符 / 滚动 7 字符」做两行极简折叠；
+      // 与 fsShed() 同一个模式判据，不依赖 Text 自动折行，否则会把区间从中间切断
+      case 1: {
+        const rawShed: string = row.getShedDisplay();
+        const allVisible: boolean = this.shedAllColumnsVisible();
+        const shedLines: string[] = renderForMode(rawShed, allVisible);
+        // 诊断日志：把送入折叠算法前的原始字符串原样打出来，便于核对真机数据
+        if (rawShed.length > 0) {
+          console.info('[ShedRaw] r=' + rowIndex + ' full=' + allVisible +
+            ' fs=' + this.fsShed() + ' budget=' + shedMaxCharsForMode(allVisible) +
+            ' raw=[' + rawShed + '] out=' + JSON.stringify(shedLines));
+        }
+        return shedLines.join('\n');
+      }
       case 2: return row.shedCount === 0 ? '' : Math.round(row.shedCount).toString();
       case 3: return this.formatNumber(row.average);
       case 4: return this.formatNumber(row.fermented);
@@ -983,7 +1009,14 @@ export struct MixCalcTable {
       return;
     }
     const texts: string[] = this.snapshotShedTexts();
+    // 自愈：换格路径漏拍快照时，快照行会停在上一次打开的格子。
+    // 不修的话实时重推拿旧快照把后来填好的行抹成空，表现为「第二行输入、第一行不跟着变」。
+    if (this.shedEditActive && this.shedEditRow !== this.editRow
+      && this.editRow >= 0 && this.editRow < texts.length) {
+      this.beginShedEdit(this.editRow);
+    }
     const liveTyping: boolean = this.shedEditActive
+      && this.shedEditRow === this.editRow
       && this.shedEditSnapshot.length === texts.length
       && this.shedEditRow >= 0 && this.shedEditRow < texts.length;
 
@@ -1030,6 +1063,11 @@ export struct MixCalcTable {
   private applyEdit(text: string, persist: boolean = true): void {
     if (this.editRow < 0 || this.editCol < 0) {
       return;
+    }
+    // 定稿（失焦 / 换格 / 下一行按钮）一律退出「边打字边重推」，
+    // 用全表当前声明重算一次，别把编辑快照里的中间态落盘。
+    if (persist && this.shedEditActive) {
+      this.endShedEdit();
     }
     const row: FeedData = this.rows[this.editRow];
     const value: string = text.trim();
@@ -1096,6 +1134,7 @@ export struct MixCalcTable {
   // 收尾：只有真改过才提交落盘；只点一下没输入不写脏数据（安卓 dirty 标记）
   // 编辑结束＝失去焦点：这里做一次结算，棚数仍为 0 的行彻底清空
   private finishEdit(): void {
+    this.blurSkipped = false;
     if (this.editingRow >= 0 && this.editingCol >= 0) {
       const text: string = this.editingText;
       const wasDirty: boolean = this.editDirty;
@@ -1266,7 +1305,9 @@ export struct MixCalcTable {
     return result;
   }
 
-  // 「下一行」：相当于回车向下，同一列换到下一行
+  // 「下一行」：跳到下一行能编辑的格子。
+  // 同一列能进就保持同列；下一行是空行时料量/平均进不去，就退到该行第一个可编辑格
+  // （通常是棚号），换格照常发生，结算也照常跑，不会「停在原处」把死行留着。
   private nextRowDown(): void {
     const now: number = Date.now();
     if (now - this.lastNextAt < 120) {
@@ -1287,18 +1328,37 @@ export struct MixCalcTable {
       this.applyEdit(this.editingText, true);
     }
     this.editDirty = false;
-    const col: number = this.editingCol;
-    let row: number = this.editingRow + 1;
-    while (row < this.rows.length) {
-      if (!this.isCellEnabled(this.rows[row], col)) {
-        // 这列在下面某行不能编辑，就停在原处（跟安卓回车到头一样）
-        return;
-      }
-      // 真正换格才结算：上面提前 return 时编辑还留在原格，不能清数据
-      this.settleZeroRows();
-      this.moveEditor(row, col);
+    const row: number = this.editingRow + 1;
+    if (row >= this.rows.length) {
       return;
     }
+    let targetCol: number = -1;
+    if (this.isCellEnabled(this.rows[row], this.editingCol)) {
+      targetCol = this.editingCol;
+    } else {
+      const cols: number[] = this.editableColumns();
+      for (let i = 0; i < cols.length; i++) {
+        if (this.isCellEnabled(this.rows[row], cols[i])) {
+          targetCol = cols[i];
+          break;
+        }
+      }
+    }
+    if (targetCol < 0) {
+      // 下一行一个能编辑的格子都没有，才停在原处（回车到头）
+      return;
+    }
+    // 真正换格才结算：跟手点单元格同一套，连死行回收一起做；
+    // 上面提前 return 时编辑还留在原格，不能清数据
+    // 结算回收死行后下面的行整体上移，旧下标会指向目标行的下一行：
+    // 跟 openEditor 一样先记住目标行对象，结算后再按新下标定位
+    const targetRef: FeedData = this.rows[row];
+    this.settleRowsAndPad([]);
+    const targetIdx: number = this.rows.indexOf(targetRef);
+    if (targetIdx < 0) {
+      return;
+    }
+    this.moveEditor(targetIdx, targetCol);
   }
 
   private nextCell(): void {
@@ -1345,8 +1405,14 @@ export struct MixCalcTable {
             return;
           }
         }
-        this.settleZeroRows();
-        this.moveEditor(row, target);
+        // 结算删行会让目标行上移，先记住行对象、结算后按新下标定位（同 openEditor）
+        const targetRef: FeedData = this.rows[row];
+        this.settleRowsAndPad([]);
+        const targetIdx: number = this.rows.indexOf(targetRef);
+        if (targetIdx < 0) {
+          return;
+        }
+        this.moveEditor(targetIdx, target);
         return;
       }
     }
@@ -1381,6 +1447,13 @@ export struct MixCalcTable {
     }
     this.startCaret();
     this.ensureEditorVisible();
+    // 「下一行 / 下一步」走这里而不是 openEditor：必须同步棚号编辑快照，
+    // 否则 shedEditRow 还停在上一格，实时重推会把别行刚填的声明当空气。
+    if (column === 1) {
+      this.beginShedEdit(row);
+    } else {
+      this.endShedEdit();
+    }
   }
 
   // 把正在编辑的格子滚进可视区（对齐安卓 keepEditingCellVisible）
@@ -1483,7 +1556,10 @@ export struct MixCalcTable {
     this.overLimitWarned = true;
     promptAction.showToast({
       message: t(this.lang, 'shed.overLimit').replace('%d', MAX_SHED_NUMBER.toString()),
-      duration: 2000
+      duration: 2000,
+      // 贴在表格最上面一行：状态栏约 32vp + 标题栏 40vp，别再沉到屏幕底部
+      alignment: Alignment.Top,
+      offset: { dx: 0, dy: 72 }
     });
   }
 
@@ -1801,7 +1877,9 @@ export struct MixCalcTable {
     if (pointlessWholeRowMove(oldTarget, this.shedNumbersOf(sourceRow), numbers)) {
       promptAction.showToast({
         message: t(this.lang, 'shed.transferWholeToBlank'),
-        duration: 2500
+        duration: 2500,
+        alignment: Alignment.Top,
+        offset: { dx: 0, dy: 72 }
       });
       this.clearPendingTransfer();
       return;
@@ -2289,6 +2367,39 @@ export struct MixCalcTable {
     this.recomputeFirstRow();
     // 载入后清一次历史脏数据：棚数为 0 却还留着料的，按新行处理
     this.settleZeroRows();
+    this.bindWindowFocusEvents();
+  }
+
+  /**
+   * 把「窗口级失焦」和「用户主动离开单元格」分开。
+   * 安卓的 CellEditorOverlay 没有 OnFocusChangeListener，end() 只由 handleTap 触发，
+   * 所以截屏 / 下拉通知栏 / 切后台不会结算，编辑浮层与实时计算结果都留在屏上。
+   * 鸿蒙这边补一个窗口焦点状态：INACTIVE 期间不结算，回到 ACTIVE 再把焦点还给输入框，
+   * 之后用户点别处照常走 onBlur 结算。
+   */
+  private bindWindowFocusEvents(): void {
+    try {
+      window.getLastWindow(getContext(this)).then((win: window.Window) => {
+        win.on('windowEvent', (type: window.WindowEventType) => {
+          if (type === window.WindowEventType.WINDOW_INACTIVE) {
+            this.windowActive = false;
+          } else if (type === window.WindowEventType.WINDOW_ACTIVE) {
+            this.windowActive = true;
+            if (this.blurSkipped && this.editingRow >= 0 && this.editingCol >= 0) {
+              this.blurSkipped = false;
+              setTimeout(() => {
+                focusControl.requestFocus('cellEditor');
+              }, 80);
+            }
+          }
+        });
+      }).catch(() => {
+        console.error('windowEvent bind failed');
+      });
+    } catch (e) {
+      // 个别设备拿不到主窗口：退化成只按「有没有用户触摸」判定，不影响输入
+      console.error('windowEvent bind failed');
+    }
   }
 
   @Builder
@@ -2296,7 +2407,7 @@ export struct MixCalcTable {
     Text(this.cellText(row, col, r))
       .width(this.cw(col))
       .height(this.rh())
-      // 棚号列字号与字符预算同源（shedFontSizeVp / renderForColumn），按实际列宽自适应
+      // 棚号列字号与字符预算同源（shedFontSizeForMode / renderForMode），按是否铺满分档
       .fontSize(col === 1 ? this.fsShed() : this.fs())
       .fontWeight(FontWeight.Bold)
       .fontColor(this.cellColor(col))
@@ -2555,6 +2666,17 @@ export struct MixCalcTable {
           })
           .onBlur(() => {
             if (Date.now() - this.editorOpenedAt < 400) {
+              return;
+            }
+            // 对齐安卓：只有「窗口仍在前台 + 确实是用户刚点过屏幕」才算离开单元格。
+            // 系统截屏 / 通知栏 / 切后台让 TextInput 失焦时，编辑态和实时计算结果都保留，
+            // 不结算、不关编辑器；回到前台由 WINDOW_ACTIVE 把焦点还回来。
+            const touchDelta: number = Date.now() - this.lastUserTouchAt;
+            const userTappedAway: boolean = this.windowActive && touchDelta < 800;
+            console.info('[ShedBlur] active=' + this.windowActive.toString() +
+              ' touchDelta=' + touchDelta.toString() + ' settle=' + userTappedAway.toString());
+            if (!userTappedAway) {
+              this.blurSkipped = true;
               return;
             }
             this.finishEdit();
@@ -2862,5 +2984,18 @@ export struct MixCalcTable {
     }
     .width('100%')
     .height('100%')
+    // 用户主动触摸的时间戳：onBlur 只认「刚点过屏幕」的失焦。
+    // 系统截屏 / 通知栏 / 切后台没有触摸事件，据此把它们挡在结算之外。
+    .onTouch((event: TouchEvent) => {
+      if (event.type === TouchType.Down) {
+        this.lastUserTouchAt = Date.now();
+        if (this.blurSkipped && this.editingRow >= 0 && this.editingCol >= 0) {
+          // 截屏 / 通知栏回来后第一次触摸：先把焦点还给输入框，
+          // 之后点别处才会再触发一次 onBlur，正常结算
+          this.blurSkipped = false;
+          focusControl.requestFocus('cellEditor');
+        }
+      }
+    })
   }
 }

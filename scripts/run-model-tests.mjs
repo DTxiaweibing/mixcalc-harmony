@@ -34,7 +34,7 @@ const MODEL_FILES = [
 ];
 
 // common/ 下同样是纯计算（不 import ArkUI），一并纳入回归：
-// LayoutRules 的列宽 / 铺满判据此前没有单测，600~612vp 边界因此漏掉过。
+// LayoutRules 的列宽 / 铺满判据此前没有单测，600vp 阈值边界因此漏掉过。
 const COMMON_FILES = ['LayoutRules'];
 
 const keepBuild = process.env.MODEL_TEST_KEEP === '1';

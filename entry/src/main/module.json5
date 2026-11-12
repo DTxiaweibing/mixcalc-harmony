@@ -17,7 +17,10 @@
         "label": "$string:EntryAbility_label",
         "startWindowIcon": "$media:start_transparent",
         "startWindowBackground": "$color:start_window_background",
-        "orientation": "auto_rotation",
+        // 启动窗口按竖屏创建：手机横着拿冷启动时不会先横屏白屏再转竖。
+        // 平板在 EntryAbility.onWindowStageCreate 里改回 AUTO_ROTATION，
+        // 运行中转屏再由 onConfigurationUpdate 重新声明，抵消静态竖屏的影响。
+        "orientation": "portrait",
         "supportWindowMode": ["fullscreen", "split"],
         "exported": true,
         "skills": [

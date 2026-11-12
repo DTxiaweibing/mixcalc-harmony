@@ -1,4 +1,4 @@
-import { UIAbility, AbilityConstant, Want } from '@kit.AbilityKit';
+import { UIAbility, AbilityConstant, Want, Configuration } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { applyHomeBars, setupImmersive, syncWindowMode } from '../common/WindowChrome';
@@ -7,6 +7,25 @@ export default class EntryAbility extends UIAbility {
   private maximizeStarted: boolean = false;
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+  }
+
+  /**
+   * 平板运行中转屏：静态声明是 portrait（为了手机冷启动不闪横屏），
+   * 系统重建窗口时可能仍按静态竖屏把窗口压成窄条居中。配置变更到达时
+   * 重新声明 AUTO_ROTATION，让窗口按当前屏幕方向铺满。
+   * 手机不走这里：手机由 applyWindowSetup 锁 PORTRAIT，不需要自动旋转。
+   */
+  onConfigurationUpdate(newConfig: Configuration): void {
+    if (deviceInfo.deviceType === 'phone' || newConfig.direction === undefined) {
+      return;
+    }
+    window.getLastWindow(this.context).then((win: window.Window) => {
+      win.setPreferredOrientation(window.Orientation.AUTO_ROTATION).catch((e: BusinessError) => {
+        console.error('reapply auto rotation failed: ' + e.code);
+      });
+    }).catch((e: BusinessError) => {
+      console.error('getLastWindow failed: ' + e.code);
+    });
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
@@ -32,9 +51,9 @@ export default class EntryAbility extends UIAbility {
       console.error('getMainWindowSync failed: ' + e);
       return;
     }
-    // 静态方向声明保持 auto_rotation：平板运行中旋转必须由系统正常重建窗口。
-    // 曾经把 module.json5 写成 portrait 再靠这里给平板补 AUTO_ROTATION，
-    // 冷启动横/竖都正常，但转屏时系统按静态 portrait 把窗口压成竖屏窄条居中。
+    // 静态方向声明是 portrait：启动窗口按竖屏创建，手机横着拿冷启动不会先横后竖闪白屏。
+    // 平板在这里改回 AUTO_ROTATION（冷启动横/竖都正常）；运行中转屏时系统会按
+    // 静态 portrait 重建窗口，由 onConfigurationUpdate 再声明一次自动旋转来抵消。
     // 手机（含折叠屏单屏态）在这里锁 PORTRAIT，仍在加载内容之前完成。
     const isPhone: boolean = deviceInfo.deviceType === 'phone';
     win.setPreferredOrientation(

@@ -256,7 +256,9 @@ struct Index {
       // 文案读不到就不能算同意过：提示后退出，等用户重试
       promptAction.showToast({
         message: t(this.lang, 'privacy.loadFail'),
-        duration: 3000
+        duration: 3000,
+        alignment: Alignment.Top,
+        offset: { dx: 0, dy: 72 }
       });
       const ctx2 = getContext(this) as common.UIAbilityContext;
       ctx2.terminateSelf();
@@ -583,7 +585,13 @@ struct Index {
   }
 
   private toast(message: string): void {
-    promptAction.showToast({ message: message, duration: 2000 });
+    promptAction.showToast({
+      message: message,
+      duration: 2000,
+      // 统一放在表格最上面一行，不再出现在屏幕底部
+      alignment: Alignment.Top,
+      offset: { dx: 0, dy: 72 }
+    });
   }
 
   private openPage(route: string): void {

@@ -35,20 +35,20 @@ export default function run(t) {
     }
   }
 
-  // ① 纯散点全显示 A-2
-  assertRender('1 3 5 7 9 11 13', ['1 3 5', '7 9 11 13'], 'case1_pureScatterTwoLines');
+  // ① 纯散点全显示 A-2（切分取最接近对半，平手偏短首行）
+  assertRender('1 3 5 7 9 11 13', ['1 3 5 7', '9 11 13'], 'case1_pureScatterTwoLines');
   // ② 两行全显示 A-2
   assertRender('1 3-15 17 19-32', ['1 3-15', '17 19-32'], 'case2_twoLinesFull');
   // ③ 三位数防爆 A-2
   assertRender('101-105 107 109', ['101-105', '107 109'], 'case3_threeDigitsNoOverflow');
-  // ④ Range 截断 B-2：中间被折叠，首尾 Range 都露出
-  assertRender('1 3-15 18 20 22 25-32', ['1…3-15', '…25-32'], 'case4_rangeTruncate');
+  // ④ Range 截断 B-2：中间被折叠，首尾 Range 都露出；首行贪心补到 18
+  assertRender('1 3-15 18 20 22 25-32', ['1…3-15 18', '…25-32'], 'case4_rangeTruncate');
   // ⑤ 双 Range 极限 B-2（关键极限用例）
   assertRender('1 3 5 7-15 18 20 22 25-32 37 39 41',
     ['1 3…7-15', '…25-32…'], 'case5_doubleRangeLimit');
   // ⑥ 双大 Range + 散点 B-2
   assertRender('1 3-15 18 20 22 24 26 28 30 100-199',
-    ['1…3-15', '…100-199'], 'case6_doubleBigRangeWithScatter');
+    ['1…3-15 18', '…100-199'], 'case6_doubleBigRangeWithScatter');
   // 单区间单行 A-1
   assertRender('1-40', ['1-40'], 'singleRangeOneLine');
 
@@ -62,9 +62,9 @@ export default function run(t) {
   assertRender('1-3 4', ['1-4'], 'preprocessMergesAdjacent: 1-3 4');
   assertRender('1、2、3', ['1-3'], 'preprocessMergesAdjacent: 1、2、3');
 
-  // B-1 散点截断：第一行贪心、第二行尾部倒推带 "… "
+  // B-1 散点截断：第一行贪心、第二行尾部倒推带 "…"（紧贴数字，省下的 1 字符多露一个号）
   assertRender('2 4 6 8 10 12 14 16 18 20 22',
-    ['2 4 6 8', '… 20 22'], 'scatterTruncateHasLeadingEllipsis');
+    ['2 4 6 8', '…18 20 22'], 'scatterTruncateHasLeadingEllipsis');
 
   // 只有一个区间时只露一次（0.3.17 修复）：9-15 在合并后的输出里只出现一次
   assertRender('1 3 5 7 9-15 17 19 21',
