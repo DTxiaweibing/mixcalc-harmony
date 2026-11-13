@@ -683,6 +683,21 @@ dist\mixcalc-<version>-release-signed.app     ← 上架传这个
 
 云调试用的 `.hap` 仍用之前的 `dist\mixcalc-0.3.4-release-signed.hap`，不要混。
 
+### 0.3.6 发布包记录（2026-11-13 定稿）
+
+| 产物 | 大小 | SHA256 |
+|---|---|---|
+| `dist\mixcalc-0.3.6-release-signed.app` | 1,914,363 B | `06FCF1E56F74777004AEB386FCD9E1BE8C1AC5C0ACCFFD04923684FF9373343A` |
+| `dist\mixcalc-0.3.6-release-signed.hap`（自测装机） | 2,275,205 B | `63DE9C3FDC4322AC6F7762E9D0F3145EE0A04A26724DD898722D06450911E521` |
+| `dist\mixcalc-0.3.6-debug-signed.hap`（云调试 / 真机验收那份） | 2,712,141 B | `BEC8FAFFA87E1DA0D19E647ECFFF2ABE80C1A4A110DC2911973CCF60BB6CAEAE` |
+
+- 版本 `0.3.6 / 1000306`；`.app` 内是 release 签名（profile 证书名 `Release`），`.hap` 是同一份代码的 release 签名版，供装机自测。
+- 解包核对过：`orientation = $string:entry_orientation`（base `portrait` / tablet `auto_rotation`）、
+  `resources/base/profile/configuration.json` = `{"configuration":{"fontSizeScale":"nonFollowSystem"}}`、
+  `ets/modules.abc` 含 `renderForMode` / `fsShed` / `heightAdaptivePolicy`。上架直接传 `.app`。
+- 脚本跑 `hvigor clean` 会清掉 `entry\build`，debug 包已提前备份到 `dist`。
+
+
 > 脚本运行期间 `build-profile.json5` 只是把 `signingConfig` 注释掉，不写密码。如果中途 Ctrl+C/崩溃，用同目录的 `build-profile.json5.bak` 覆盖回去再删掉。
 >
 > 上架资料里的隐私政策/用户协议填**外链 URL**；应用内菜单现在打开本地 `privacy.html` / `user.html` 不影响打包。
