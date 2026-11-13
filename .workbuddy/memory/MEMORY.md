@@ -11,12 +11,13 @@
 - 列全部显示（≥600vp 铺满）→ **15vp / 每行 9 字符**。
 - 列滚动显示（手机固定列宽）→ **14vp / 每行 7 字符**。
 - 字号与字符预算必须同源，取同一个 `shedAllColumnsVisible()` 判据；整列统一、不按行浮动。
-- 棚号上限 **99**，提示文案示例 `1-99`；toast 贴在表格最上面一行（`Alignment.Top` + `offset: { dx: 0, dy: 72 }`，SDK 的 `Offset` 字段是 `dx/dy` 不是 `x/y`）。
+- 棚号上限 **99**，提示文案示例 `1-99`。超上限提示不再用系统 toast（`Alignment.Top + offset` 会随状态栏/标题栏高度压到交界处），改成页面内横幅：压在表头这一行（`position({x:0,y:0})`、`height(hh())`），背景 `#FBE3E3` / 文字 `#7A1F1F`，2.2s 自动收，`HitTestMode.None` 不挡表头点击。
 - 正文 16vp、表头 14vp。
-- 版本固定 **v0.3.6 / 1000306**，不升 0.3.7。
+- 版本 **v0.3.7 / 1000307**。0.3.6 已上架，同版本号不能再发，之后每次上架都必须升 versionCode。
 
 ## 编辑态结算（勿改回去）与启动方向（11-12 22:35 实测改回 auto_rotation）
 - **只有用户主动离开单元格才结算**：安卓 `CellEditorOverlay` 没有焦点监听，`end()` 只由 `MixCalcTableView.handleTap()` 触发；鸿蒙 `TextInput.onBlur` 必须区分窗口级失焦（截屏/通知栏/切后台）与用户点别处，靠 `windowEvent(WINDOW_ACTIVE/INACTIVE)` + 根布局 `onTouch` 时间戳双判据。系统级失焦要**保留编辑态和实时计算结果**，否则一截屏就结算、屏也截不到。实时计算 `onChange → editLive → applyEdit(text,false)` 与失焦定稿 `finishEdit → applyEdit(text,true) + settleRowsAndPad` 两条链路不许合并。
+- **所有「离开编辑」出口都要传被删空的行**：`finishEdit`（失焦）、`nextRowDown`（下一行）、`nextCell`（下一步/回车）、`openEditor`（换格）统一用 `emptiedByTyping(before, row)`；`before` 必须在 `endShedEdit` / `applyEdit` 之前从 `shedEditSnapshot` 取。判据是「编辑前非空 && 现在棚号空 && 棚数 ≤ 0」（模型 `isEmptyingShedEdit`），与安卓 `onCellEditEnd` 的 `shedEditSnapshot` 对齐。漏传时只有「光有棚号没填料」的行不回收，表现为时好时坏。
 - **静态方向必须是 `module.json5` 的 `auto_rotation`（11-12 晚云调试实测推翻了白天定的 portrait）**：启动窗口方向只由静态配置决定（早于 `onWindowStageCreate`），平板横屏由系统按「支持横屏」创建窗口才不会被压成竖屏窄条居中。`portrait` + 运行时补 `AUTO_ROTATION` 这条路**两次都失败**：`b8f714e`(11-11) 的提交注释原话「转屏时系统按静态 portrait 把窗口压成竖屏窄条居中」，`696b074`(11-12) 改回 portrait 并加 `onConfigurationUpdate` 兜底，云调试平板仍窄条 —— **运行时 API 补不回来，兜底无效**。用户口径「0.3.5 一切正常」对应的正是 11-11 之后那版 `auto_rotation`。代价：手机横着拿冷启动会「先横屏闪一下再转竖」（`applyWindowSetup` 仍锁 `PORTRAIT`），按 0.3.5 口径接受。`onConfigurationUpdate` 保留为防御性兜底，但别指望它。`EntryAbility` 手机 `PORTRAIT` / 平板 `AUTO_ROTATION` 分流 + 平板 `maximize()` 不变。
 
 ## 棚号两行排版顺序（用户 2026-11-12 按 12 组验收清单裁决，勿改回去）
@@ -24,7 +25,7 @@
 - A-2 两行切分：在**所有可行切分**里取首行长度最接近 `total/2` 的，**平手保留更靠前的 k**（首行更短）。旧的「第一个可行 k 即返回」会产出 `1-3` / `5 7-15`，必须避免；但也不能单纯取首行最长，否则 `1-3 5` / `7 9 11` 会被挤成 `1-3 5 7` / `9 11`。
 - B-2 双区间：首行在首个区间之后继续贪心补中间词（`candidate.length <= MAX`，不越过尾部区间）；若中间词**全部**露出，第二行不加前导省略号（`1-3 5` / `7-15…`），否则保留（`…21-30…`）。
 - B-1 散点：省略号紧贴数字**不留空格**（`…13 15`，不是 `… 13 15`），预算相应从 `MAX-2` 改 `MAX-1`。
-- 回归守护：`scripts/model-tests/shed-column-fit.test.mjs` 末尾有完整 12 组清单断言（24 条）；`shed-display.test.mjs` 的旧期望已同步到新口径。全量 **521 assertions**。
+- 回归守护：`scripts/model-tests/shed-column-fit.test.mjs` 末尾有完整 12 组清单断言（24 条）；`shed-display.test.mjs` 的旧期望已同步到新口径。全量 **534 assertions**（0.3.7 新增 13 条删空判定）。
 
 ## 用户偏好
 - 「没让你调整不要调整其他东西」：只改指定的数值，不要顺手动已测试通过的项；注释与测试断言同步属于必要配套。

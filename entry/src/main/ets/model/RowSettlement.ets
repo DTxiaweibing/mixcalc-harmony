@@ -89,6 +89,26 @@ export function recycleDeadRows(rows: FeedData[], emptiedByUser: number[]): numb
 }
 
 /**
+ * 判定一次棚号编辑是否把这一行「删空」了。
+ *
+ * 只认两种情况同时成立：
+ *  - 编辑前棚号非空（点一下空白行不算，否则离开编辑就会把空行当死行删掉）；
+ *  - 编辑后棚号为空，且有效棚数为 0（用户填了别的号仍算活行）。
+ *
+ * 必须在 beginShedEdit 抓到的快照上调用，且在 endShedEdit / applyEdit 之前判定，
+ * 因为那之后 shedNumber 已被新值覆盖、快照失效。
+ */
+export function isEmptyingShedEdit(beforeText: string, row: FeedData): boolean {
+  if (beforeText.trim() === '') {
+    return false;
+  }
+  if (row.shedNumber.trim() !== '') {
+    return false;
+  }
+  return row.shedCount <= 0;
+}
+
+/**
  * 一次结算：先回收死行，再兜底清数据，最后底部补空行保持总行数守恒。
  * 顺序不能反：回收会把整行（含棚号）拿掉，兜底清只动留下的行。
  */

@@ -1,6 +1,6 @@
 import { FeedData } from '../model/FeedData';
 import { ownedSets, findOverLimit, MAX_SHED_NUMBER, renormalize } from '../model/ShedCoverage';
-import { settleZeroRowData, settleRows, RowSettleResult } from '../model/RowSettlement';
+import { settleZeroRowData, settleRows, RowSettleResult, isEmptyingShedEdit } from '../model/RowSettlement';
 import { recompute, ShedDraftResult } from '../model/ShedDraft';
 import { renderForMode, shedFontSizeForMode } from '../model/ShedDisplay';
 import { transfer, giveDown, remove as removeShedNumbers, pointlessWholeRowMove, normalize as normalizeShedNumbers } from '../model/ShedText';
@@ -345,6 +345,9 @@ export struct MixCalcTable {
   private editCol: number = -1;
   // 超上限提示每次编辑只弹一次，别敲一个字符弹一次
   private overLimitWarned: boolean = false;
+  // 超上限横幅：压在表头这一行，2.2 秒后自动收；比系统 toast 位置稳（不受状态栏高度影响）
+  @State limitBannerOn: boolean = false;
+  private limitBannerTimer: number = -1;
   private editorTitle: string = '';
   private editorValue: string = '';
   private editorIsNumber: boolean = false;
@@ -959,6 +962,28 @@ export struct MixCalcTable {
   }
 
   /**
+   * 离开编辑前拍到的棚号原文（beginShedEdit 的快照）。
+   * 必须在 endShedEdit / applyEdit 之前调用，之后快照就被清掉了。
+   */
+  private shedTextBeforeEdit(row: number): string {
+    if (!this.shedEditActive || this.shedEditRow !== row) {
+      return '';
+    }
+    if (row < 0 || row >= this.shedEditSnapshot.length) {
+      return '';
+    }
+    return this.shedEditSnapshot[row];
+  }
+
+  /** 本次离开编辑是否把这一行的棚号删光了；是就返回 [row]，交给结算强制回收。 */
+  private emptiedByTyping(beforeText: string, row: number): number[] {
+    if (row < 0 || row >= this.rows.length) {
+      return [];
+    }
+    return isEmptyingShedEdit(beforeText, this.rows[row]) ? [row] : [];
+  }
+
+  /**
    * 结算并补空行：先按声明文本回收死行，再兜底清 0 棚行，底部补齐总行数。
    * 只在“离开编辑”的时刻调用；编辑途中绝不删行。
    */
@@ -1132,10 +1157,14 @@ export struct MixCalcTable {
   // 编辑结束＝失去焦点：这里做一次结算，棚数仍为 0 的行彻底清空
   private finishEdit(): void {
     this.blurSkipped = false;
+    let emptied: number[] = [];
     if (this.editingRow >= 0 && this.editingCol >= 0) {
       const text: string = this.editingText;
       const wasDirty: boolean = this.editDirty;
       const wasShed: boolean = this.editingCol === 1;
+      const shedRow: number = this.editingRow;
+      // 删空判定要用“编辑前”的原文，必须在 endShedEdit 之前把快照取出来
+      const shedBefore: string = wasShed ? this.shedTextBeforeEdit(shedRow) : '';
       this.editingRow = -1;
       this.editingCol = -1;
       this.editingSeed = '';
@@ -1151,11 +1180,12 @@ export struct MixCalcTable {
       if (wasShed) {
         this.recomputeFirstRow();
         this.version = this.version + 1;
+        emptied = this.emptiedByTyping(shedBefore, shedRow);
       }
     } else {
       this.endShedEdit();
     }
-    this.settleRowsAndPad([]);
+    this.settleRowsAndPad(emptied);
   }
 
   // 数字键盘（自己画，不用系统输入法）：回车键不再由输入法处理，
@@ -1321,6 +1351,8 @@ export struct MixCalcTable {
       this.hintController.open();
       return;
     }
+    const shedRow: number = this.editingRow;
+    const shedBefore: string = this.editingCol === 1 ? this.shedTextBeforeEdit(shedRow) : '';
     if (this.editDirty) {
       this.applyEdit(this.editingText, true);
     }
@@ -1350,7 +1382,7 @@ export struct MixCalcTable {
     // 结算回收死行后下面的行整体上移，旧下标会指向目标行的下一行：
     // 跟 openEditor 一样先记住目标行对象，结算后再按新下标定位
     const targetRef: FeedData = this.rows[row];
-    this.settleRowsAndPad([]);
+    this.settleRowsAndPad(this.emptiedByTyping(shedBefore, shedRow));
     const targetIdx: number = this.rows.indexOf(targetRef);
     if (targetIdx < 0) {
       return;
@@ -1364,6 +1396,8 @@ export struct MixCalcTable {
       return;
     }
     this.lastNextAt = now;
+    const shedRow: number = this.editingRow;
+    const shedBefore: string = this.editingCol === 1 ? this.shedTextBeforeEdit(shedRow) : '';
     if (this.editDirty) {
       this.applyEdit(this.editingText, true);
     }
@@ -1404,7 +1438,7 @@ export struct MixCalcTable {
         }
         // 结算删行会让目标行上移，先记住行对象、结算后按新下标定位（同 openEditor）
         const targetRef: FeedData = this.rows[row];
-        this.settleRowsAndPad([]);
+        this.settleRowsAndPad(this.emptiedByTyping(shedBefore, shedRow));
         const targetIdx: number = this.rows.indexOf(targetRef);
         if (targetIdx < 0) {
           return;
@@ -1418,6 +1452,7 @@ export struct MixCalcTable {
   // 编辑器保持同一个节点、只换坐标和初值：不动焦点，键盘才不会收
   private moveEditor(row: number, column: number): void {
     this.overLimitWarned = false;
+    this.hideLimitBanner();
     this.editRow = row;
     this.editCol = column;
     this.editingSeed = this.currentValue(row, column);
@@ -1545,19 +1580,28 @@ export struct MixCalcTable {
     this.hintController.open();
   }
 
-  // 棚号超过上限：一边输一边提示，但同一次编辑只提示一次
+  // 棚号超过上限：压在表头这一行提示，同一次编辑只提示一次
   private warnOverLimit(): void {
     if (this.overLimitWarned) {
       return;
     }
     this.overLimitWarned = true;
-    promptAction.showToast({
-      message: t(this.lang, 'shed.overLimit').replace('%d', MAX_SHED_NUMBER.toString()),
-      duration: 2000,
-      // 贴在表格最上面一行：状态栏约 32vp + 标题栏 40vp，别再沉到屏幕底部
-      alignment: Alignment.Top,
-      offset: { dx: 0, dy: 72 }
-    });
+    this.limitBannerOn = true;
+    if (this.limitBannerTimer !== -1) {
+      clearTimeout(this.limitBannerTimer);
+    }
+    this.limitBannerTimer = setTimeout(() => {
+      this.limitBannerOn = false;
+      this.limitBannerTimer = -1;
+    }, 2200);
+  }
+
+  private hideLimitBanner(): void {
+    if (this.limitBannerTimer !== -1) {
+      clearTimeout(this.limitBannerTimer);
+      this.limitBannerTimer = -1;
+    }
+    this.limitBannerOn = false;
   }
 
   // 本行棚数对应的棚号（打点覆盖之后真正归本行的号码）
@@ -1999,6 +2043,9 @@ export struct MixCalcTable {
     }
     // 换格前先把上一格提交掉（对齐安卓 commitInternal，键盘不闪）
     const targetRef: FeedData = this.rows[row];   // 结算可能删行，先记住对象
+    const shedRow: number = this.editingRow;
+    // 删空判定要用“编辑前”的原文：endShedEdit 之后快照就没了
+    const shedBefore: string = this.editingCol === 1 ? this.shedTextBeforeEdit(shedRow) : '';
     if (this.shedEditActive) {
       this.endShedEdit();
     }
@@ -2007,13 +2054,14 @@ export struct MixCalcTable {
     }
     this.editDirty = false;
     // 换格 = 上一格失焦：先结算死行并补空行，再打开新格
-    this.settleRowsAndPad([]);
+    this.settleRowsAndPad(this.emptiedByTyping(shedBefore, shedRow));
     const targetIdx: number = this.rows.indexOf(targetRef);
     if (targetIdx < 0) {
       return;   // 这一行自己刚被回收，不要再往它上面开编辑器
     }
     row = targetIdx;
     this.overLimitWarned = false;
+    this.hideLimitBanner();
     this.editRow = row;
     this.editCol = column;
     this.editorTitle = this.headLabel(column) + ' · ' + t(this.lang, 'dlg.row').replace('%d', (row + 1).toString());
@@ -2656,6 +2704,26 @@ export struct MixCalcTable {
             this.startFling(event.velocityX, event.velocityY);
           })
       )
+
+      // 超上限横幅：正好压在表头这一行（y=0、高=表头高），
+      // 不用系统 toast 的 offset——状态栏/标题栏高度因机型而异，toast 会压到交界处。
+      // hitTestBehavior 设成 None，不挡底下的表头点击。
+      if (this.limitBannerOn) {
+        Text(t(this.lang, 'shed.overLimit').replace('%d', MAX_SHED_NUMBER.toString()))
+          .width('100%')
+          .height(this.hh())
+          .position({ x: 0, y: 0 })
+          .fontSize('15vp')
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#7A1F1F')
+          .textAlign(TextAlign.Center)
+          .maxLines(1)
+          .backgroundColor('#FBE3E3')
+          .borderWidth({ bottom: 1 })
+          .borderColor('#E8B4B4')
+          .hitTestBehavior(HitTestMode.None)
+          .zIndex(8)
+      }
 
       // 单元格编辑器：放在最外层 Stack（和表体平级），
       // 表体重排不会重建它，焦点和键盘才稳；坐标自己按 表头高 + 行号*行高 - 滚动量 算

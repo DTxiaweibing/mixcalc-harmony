@@ -21,7 +21,8 @@ function loadModel(name) {
 }
 
 const { FeedData } = loadModel('FeedData');
-const { settleZeroRowData, recycleDeadRows, settleRows, RowSettleResult } = loadModel('RowSettlement');
+const { settleZeroRowData, recycleDeadRows, settleRows, RowSettleResult, isEmptyingShedEdit } =
+  loadModel('RowSettlement');
 
 /** 被后面行覆盖、有效棚数为 0 但仍留有料/派生值的行（对应 zeroRowWithData）。 */
 function zeroRowWithData() {
@@ -246,5 +247,57 @@ export default function run(t) {
     t.equal(last.weighed, 0, 'settleRows: 末尾新空行 weighed 为 0');
     t.equal(last.switchRatio, 0, 'settleRows: 末尾新空行 switchRatio 为 0');
     t.equal(last.isAverageManuallyModified, false, 'settleRows: 末尾新空行手动标记为 false');
+  }
+
+  // ==================== isEmptyingShedEdit：离开编辑时判定「本次被用户删空」 ====================
+
+  // 1. 编辑前有号码、编辑后空且棚数 0 → 本次删空
+  {
+    const d = row('', 0, 0);
+    t.equal(isEmptyingShedEdit('1-40', d), true, 'emptying: 删光号码且棚数 0 → true');
+  }
+
+  // 2. 编辑前后都空 → 只是路过空行，不算删空（不然点一下空行就被回收）
+  {
+    const d = row('', 0, 0);
+    t.equal(isEmptyingShedEdit('', d), false, 'emptying: 编辑前也为空 → false');
+    t.equal(isEmptyingShedEdit('   ', d), false, 'emptying: 编辑前只有空白 → false');
+  }
+
+  // 3. 仍留有棚数 → 不是死行
+  {
+    const d = row('', 0, 0);
+    d.shedCount = 3;
+    t.equal(isEmptyingShedEdit('1-40', d), false, 'emptying: 棚数仍大于 0 → false');
+    d.shedCount = -1;
+    t.equal(isEmptyingShedEdit('1-40', d), true, 'emptying: 异常负数棚数按 0 处理 → 算删空');
+  }
+
+  // 4. 编辑后文本非空 → 用户又填了别的号，不算删空
+  {
+    const d = row('1-3', 3, 0);
+    t.equal(isEmptyingShedEdit('1-40', d), false, 'emptying: 编辑后仍有号码 → false');
+    const blank = row('   ', 0, 0);
+    t.equal(isEmptyingShedEdit('1-40', blank), true, 'emptying: 编辑后只剩空白、棚数 0 → 仍算删空');
+  }
+
+  // 5. 组合用例：删空行被 settleRows 回收、下面行上顶、底部补空行
+  {
+    const rows = [
+      row('41-60', 20, 0),
+      row('', 0, 0),
+      row('61-80', 20, 0),
+      row('', 0, 0)
+    ];
+    const total = rows.length;
+    const before = '1-30';
+    const emptied = isEmptyingShedEdit(before, rows[1]) ? [1] : [];
+    const result = settleRows(rows, emptied);
+    t.equal(emptied.length, 1, 'emptying+settle: 中间行判定为本次删空');
+    t.equal(result.removed.length, 1, 'emptying+settle: 回收 1 行');
+    t.equal(result.removed[0], 1, 'emptying+settle: 回收下标 1');
+    t.equal(rows.length, total, 'emptying+settle: 行数守恒');
+    t.equal(rows[1].shedNumber, '61-80', 'emptying+settle: 下面行上顶');
+    t.equal(rows[total - 1].shedNumber, '', 'emptying+settle: 末尾补空行');
   }
 }
