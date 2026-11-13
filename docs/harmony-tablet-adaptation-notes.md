@@ -8,7 +8,7 @@
 
 ## 一、先记住这 6 条
 
-1. **手机启动竖屏，平板自动旋转**：`module.json5` 先写 `portrait`，避免手机启动先横屏闪一下；运行时再按 `deviceInfo.deviceType` 给平板切 `AUTO_ROTATION`。
+1. **手机启动竖屏，平板自动旋转**：`module.json5` 的 `orientation` 写成资源索引 `$string:entry_orientation`，手机（base）取 `portrait`、平板（`tablet` 限定词目录）取 `auto_rotation`；运行时再按 `deviceInfo.deviceType` 兜底声明一次。启动窗口方向只由静态配置决定，运行时改不回来。
 2. **不要试图强制平板竖屏**：第三方应用在 Pad 上强制不了整机方向；`orientation: portrait` 只用于启动首帧，平板运行时必须切回自动旋转。
 3. **平板要“启动即全屏”，同时允许用户分屏**：`supportWindowMode: ["fullscreen", "split"]`，并在 `EntryAbility` 启动时对平板调用 `maximize()`；只写 `["fullscreen"]` 会彻底禁用分屏。
 4. **11 列按“当前窗口宽度”算，不是物理屏幕宽度**：`viewW` 是窗口内容宽度。自由窗口下它小于屏幕宽度，表格按窗口铺满是对的；最大化/全屏后自然变成整屏宽度。
@@ -19,16 +19,31 @@
 
 ## 二、方向：手机锁竖屏，平板自动旋转
 
-### 2.1 配置
+### 2.1 配置（按设备类型分流）
 
 `entry/src/main/module.json5`：
 
 ```json5
-"orientation": "portrait",
+"orientation": "$string:entry_orientation", // API 14+ 支持资源索引
 "supportWindowMode": ["fullscreen", "split"],
 ```
 
-### 2.2 运行时按设备类型设置
+`entry/src/main/resources/base/element/string.json`（手机）：
+
+```json
+{ "name": "entry_orientation", "value": "portrait" }
+```
+
+`entry/src/main/resources/tablet/element/string.json`（平板限定词目录）：
+
+```json
+{ "name": "entry_orientation", "value": "auto_rotation" }
+```
+
+这样手机启动窗口直接按竖屏创建（横着拿也不闪「先横后竖」），平板启动窗口跟随屏幕方向、
+横屏直接铺满，不会被系统按「竖屏应用」压成竖屏窄条居中。
+
+### 2.2 运行时按设备类型兜底
 
 `EntryAbility.onWindowStageCreate`，`loadContent` 之前：
 
@@ -49,14 +64,18 @@ if (!isPhone) {
 - 平板：`AUTO_ROTATION`，横竖屏都跟随系统；启动时 `maximize()` 回到全屏；
 - `2in1` / `default`：按自动旋转处理。
 
-### 2.3 为什么不能强制平板竖屏
+### 2.3 为什么不能只写一个方向枚举
+
+启动窗口的方向**只由静态配置决定**（早于 `onWindowStageCreate`），运行时 `setPreferredOrientation` 只能改之后的窗口行为，
+改不了已经按静态值创建的首帧窗口——这正是「手机写 `portrait` 就不闪横屏、但平板被压成竖屏窄条」的根因。
+一个静态枚举只能服务一种设备，所以要用「设备类型限定词 + 资源索引」在启动时按设备取值（见 2.1）。
 
 Pad 的规格是：竖屏应用在横屏时**居中显示/留边**，系统不会为了一个应用把整机转成竖屏。  
 所以：
 
-- 不要写“平板也强制竖屏”；
-- 也不要把横屏留边当成 bug；
-- 要么接受留边，要么让平板自动旋转、横屏也铺满（本项目选后者）。
+- 不要写“平板也强制竖屏”（`tablet` 限定词里必须给 `auto_rotation`）；
+- 也不要指望运行时 `onConfigurationUpdate` 能抵消静态竖屏（11-12 云调试实测无效）；
+- 11-13 起用资源索引分流，手机、平板各自的诉求同时满足。
 
 ---
 

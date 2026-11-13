@@ -10,9 +10,9 @@ export default class EntryAbility extends UIAbility {
   }
 
   /**
-   * 平板运行中转屏：静态声明是 portrait（为了手机冷启动不闪横屏），
-   * 系统重建窗口时可能仍按静态竖屏把窗口压成窄条居中。配置变更到达时
-   * 重新声明 AUTO_ROTATION，让窗口按当前屏幕方向铺满。
+   * 防御性兜底：静态方向已按设备类型分流（手机 base=portrait / 平板 tablet=auto_rotation），
+   * 平板本来就是 AUTO_ROTATION，正常转屏由系统重建窗口，不依赖这里。
+   * 万一某些机型配置变更时把窗口方向带偏，再声明一次。
    * 手机不走这里：手机由 applyWindowSetup 锁 PORTRAIT，不需要自动旋转。
    */
   onConfigurationUpdate(newConfig: Configuration): void {
@@ -51,10 +51,11 @@ export default class EntryAbility extends UIAbility {
       console.error('getMainWindowSync failed: ' + e);
       return;
     }
-    // 静态方向声明是 portrait：启动窗口按竖屏创建，手机横着拿冷启动不会先横后竖闪白屏。
-    // 平板在这里改回 AUTO_ROTATION（冷启动横/竖都正常）；运行中转屏时系统会按
-    // 静态 portrait 重建窗口，由 onConfigurationUpdate 再声明一次自动旋转来抵消。
-    // 手机（含折叠屏单屏态）在这里锁 PORTRAIT，仍在加载内容之前完成。
+    // 静态方向由 module.json5 的 $string:entry_orientation 按设备类型解析：
+    // 手机 base=portrait（启动窗口直接竖屏），平板 tablet=auto_rotation（横屏铺满）。
+    // 这里再按 deviceInfo 锁一次只作兜底（资源索引解析异常、折叠屏单屏态等），
+    // 仍在加载内容之前完成，不影响启动首帧。
+    // 手机（含折叠屏单屏态）在这里锁 PORTRAIT。
     const isPhone: boolean = deviceInfo.deviceType === 'phone';
     win.setPreferredOrientation(
       isPhone ? window.Orientation.PORTRAIT : window.Orientation.AUTO_ROTATION

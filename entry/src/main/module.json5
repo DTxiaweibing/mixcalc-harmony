@@ -17,10 +17,13 @@
         "label": "$string:EntryAbility_label",
         "startWindowIcon": "$media:start_transparent",
         "startWindowBackground": "$color:start_window_background",
-        // 启动窗口按竖屏创建：手机横着拿冷启动时不会先横屏白屏再转竖。
-        // 平板在 EntryAbility.onWindowStageCreate 里改回 AUTO_ROTATION，
-        // 运行中转屏再由 onConfigurationUpdate 重新声明，抵消静态竖屏的影响。
-        "orientation": "portrait",
+        // 启动方向按设备类型分流（API 14+ 支持资源索引，见官方 module.json5 文档）：
+        //   base（手机）  = portrait      启动窗口直接按竖屏创建，横着拿冷启动也不会「先横后竖」；
+        //   tablet        = auto_rotation 平板启动窗口跟随屏幕方向，横屏铺满，
+        //                                 不会被系统按「竖屏应用」压成窄条居中。
+        // 为什么不能只写一个枚举：启动窗口方向只由这里决定（早于 onWindowStageCreate），
+        // 运行时 setPreferredOrientation 补不回来（11-02~11-12 已反复验证）。
+        "orientation": "$string:entry_orientation",
         "supportWindowMode": ["fullscreen", "split"],
         "exported": true,
         "skills": [

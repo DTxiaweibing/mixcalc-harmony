@@ -3,7 +3,28 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循语义化版本。
 本文件从 0.3.5 起记录，更早版本见 Git 提交历史。
 
-## [0.3.6] - 未发布（市场当前为 0.3.5）
+## [0.3.6] - 2026-11-13（定稿，待上架；市场当前为 0.3.5）
+
+> 定稿状态：代码冻结（2026-11-13）。模型回归 521 条断言全绿，nova 15 真机与华为云调试验收通过；
+> 发布包由 `scripts/build-release-app.ps1` 产出 `dist\mixcalc-0.3.6-release-signed.app`。
+> 对外更新说明见 `docs/应用市场更新说明-0.3.6.md`。
+
+### 启动方向与字号固定（2026-11-13）
+
+#### 修复
+
+- **手机冷启动不再「先横后竖」，平板也不再被压成竖屏窄条**：`module.json5` 的 `orientation` 改成资源索引
+  `$string:entry_orientation`（API 14+ 支持），启动窗口方向按设备类型取值——手机（base）`portrait`，
+  平板（`resources/tablet/` 限定词目录）`auto_rotation`。启动窗口方向只由静态配置决定、早于 `onWindowStageCreate`，
+  运行时 `setPreferredOrientation` 补不回来，所以只能在静态配置这里按设备分流。
+- **字号彻底不跟系统「字体和显示大小」走**：`AppScope/app.json5` 增加 `"configuration": "$profile:configuration"`，
+  对应 `configuration.json` 里 `fontSizeScale: nonFollowSystem`；页面字号本来就全部是 `vp`（vp 不缩放），
+  这一层再兜住菜单 / 弹窗 / 输入框等系统组件的默认 `fp` 字号。
+- **棚号两行显示不再因机型字体略宽而丢掉第二行**：折叠后第二行会出现 8 个字符（如 `…16-20…`），
+  字符预算按每行 7 字算，真机实测 8 字占 60.4vp / 可用 63vp，只剩 2.5vp 余量；
+  系统字体稍宽的机型（云调试 Pura 90 Plus）会把第二行折成 `…`、余下字符挤到第 3 行被裁掉。
+  棚号格改为「固定两行 + 放不下时按需缩字号」（`minFontSize 10vp` / `maxFontSize` 沿用 14/15vp 分档 /
+  `heightAdaptivePolicy: MAX_LINES_FIRST`），**列宽、行高、边界一律不动**，正常机型字号仍是 14vp 不缩。
 
 ### 棚号账本（2026-11-10 补齐，对齐安卓 0.3.7 → 0.3.20）
 

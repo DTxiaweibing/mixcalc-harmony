@@ -21,6 +21,9 @@ const SHED_ACTION_TRANSFER_OUT: number = 4;
 const SHED_ACTION_TRANSFER_IN: number = 5;
 const ROW_H: number = 40;
 const HEAD_H: number = 40;
+// 棚号格自适应字号的下限：正常机型 14vp 就放得下，只有系统字体偏宽的机型
+// 会缩到 12~13vp；给到 10vp 只是兜底，避免极端字体把内容裁掉。
+const SHED_MIN_FONT_VP: string = '10vp';
 
 @CustomDialog
 struct CellEditorDialog {
@@ -2398,18 +2401,25 @@ export struct MixCalcTable {
 
   @Builder
   cellView(row: FeedData, col: number, r: number) {
+    if (col === 1) {
+      this.shedCellView(row, r)
+    } else {
+      this.textCellView(row, col, r)
+    }
+  }
+
+  @Builder
+  textCellView(row: FeedData, col: number, r: number) {
     Text(this.cellText(row, col, r))
       .width(this.cw(col))
       .height(this.rh())
-      // 棚号列字号与字符预算同源（shedFontSizeForMode / renderForMode），按是否铺满分档
-      .fontSize(col === 1 ? this.fsShed() : this.fs())
+      .fontSize(this.fs())
       .fontWeight(FontWeight.Bold)
       .fontColor(this.cellColor(col))
       .textAlign(TextAlign.Center)
-      // 棚号列两行：行高 15 → 共 30vp，放进 40vp 行高；单行文本也居中
-      .lineHeight(col === 1 ? 15 : 18)
-      .maxLines(col === 1 ? 2 : 1)
-      .textOverflow({ overflow: col === 1 ? TextOverflow.Clip : TextOverflow.Ellipsis })
+      .lineHeight(18)
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
       .backgroundColor(this.cellFill(row, col, r))
       .border({ width: 0.5, color: this.cellBorderColor(row, col, r) })
       .onClick(() => {
@@ -2419,6 +2429,40 @@ export struct MixCalcTable {
         LongPressGesture({ duration: 350 })
           .onAction(() => {
             this.openRatio(r, col);
+          })
+      )
+  }
+
+  // 棚号格：列宽 / 行高与其它格完全一致，只多一条「放不下时按需缩字号」。
+  // 折叠后的第二行可能出现 8 个字符（如 …16-20…），而字符预算按每行 7 字算，
+  // 不同机型的系统字体字宽略有差异：宽一点的那台会把第 2 行折成 "…"，剩下的字
+  // 挤到第 3 行被 maxLines(2) 裁掉（云调试 Pura 90 Plus 实拍）。
+  // MAX_LINES_FIRST：固定两行，只在真的放不下时缩字号，保证各机型内容逐字一致。
+  @Builder
+  shedCellView(row: FeedData, r: number) {
+    Text(this.cellText(row, 1, r))
+      .width(this.cw(1))
+      .height(this.rh())
+      // 字号与字符预算同源（shedFontSizeForMode / renderForMode），按是否铺满分档
+      .minFontSize(SHED_MIN_FONT_VP)
+      .maxFontSize(this.fsShed())
+      .heightAdaptivePolicy(TextHeightAdaptivePolicy.MAX_LINES_FIRST)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(this.cellColor(1))
+      .textAlign(TextAlign.Center)
+      // 两行：行高 15 → 共 30vp，放进 40vp 行高；单行文本也居中
+      .lineHeight(15)
+      .maxLines(2)
+      .textOverflow({ overflow: TextOverflow.Clip })
+      .backgroundColor(this.cellFill(row, 1, r))
+      .border({ width: 0.5, color: this.cellBorderColor(row, 1, r) })
+      .onClick(() => {
+        this.openEditor(r, 1);
+      })
+      .gesture(
+        LongPressGesture({ duration: 350 })
+          .onAction(() => {
+            this.openRatio(r, 1);
           })
       )
   }

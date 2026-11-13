@@ -5,6 +5,10 @@
     "versionCode": 1000306,
     "versionName": "0.3.6",
     "icon": "$media:app_icon",
-    "label": "$string:app_name"
+    "label": "$string:app_name",
+    // 字号固定：不跟随系统「字体和显示大小」缩放。
+    // 页面里字号已统一写 vp（vp 本身不缩放），这里再兜住系统组件自己带的默认 fp 字号
+    // （菜单、弹窗、输入框、Toast 等），避免它们跟着系统字号变大变小。
+    "configuration": "$profile:configuration"
   }
 }
