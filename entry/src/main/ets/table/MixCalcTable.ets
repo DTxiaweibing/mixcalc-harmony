@@ -6,7 +6,8 @@ import { renderForMode, shedFontSizeForMode } from '../model/ShedDisplay';
 import { transfer, giveDown, remove as removeShedNumbers, pointlessWholeRowMove, normalize as normalizeShedNumbers } from '../model/ShedText';
 import { ShedDeletePlan } from '../model/ShedDeletePlan';
 import { t } from '../common/Strings';
-import { promptAction, window } from '@kit.ArkUI';
+import { ToastPill } from '../common/ToastPill';
+import { window } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
 import { LAYOUT_COLUMN_IDS, LAYOUT_WIDTHS, isTabletWidth, rightAlignedX } from '../common/LayoutRules';
 
@@ -345,8 +346,9 @@ export struct MixCalcTable {
   private editCol: number = -1;
   // 超上限提示每次编辑只弹一次，别敲一个字符弹一次
   private overLimitWarned: boolean = false;
-  // 超上限横幅：压在表头这一行，2.2 秒后自动收；比系统 toast 位置稳（不受状态栏高度影响）
+  // 提示胶囊：压在表头这一行，自动收；位置由表格自己的坐标系给（y=0），不猜状态栏高度
   @State limitBannerOn: boolean = false;
+  @State bannerMsg: string = '';
   private limitBannerTimer: number = -1;
   private editorTitle: string = '';
   private editorValue: string = '';
@@ -1586,6 +1588,12 @@ export struct MixCalcTable {
       return;
     }
     this.overLimitWarned = true;
+    this.showBanner(t(this.lang, 'shed.overLimit').replace('%d', MAX_SHED_NUMBER.toString()), 2200);
+  }
+
+  // 表头提示胶囊：同一时刻只留一条，后来的覆盖前一条并重新计时
+  private showBanner(message: string, ms: number): void {
+    this.bannerMsg = message;
     this.limitBannerOn = true;
     if (this.limitBannerTimer !== -1) {
       clearTimeout(this.limitBannerTimer);
@@ -1593,7 +1601,7 @@ export struct MixCalcTable {
     this.limitBannerTimer = setTimeout(() => {
       this.limitBannerOn = false;
       this.limitBannerTimer = -1;
-    }, 2200);
+    }, ms);
   }
 
   private hideLimitBanner(): void {
@@ -1748,7 +1756,11 @@ export struct MixCalcTable {
       labels.push(t(this.lang, 'shed.transferIn'));
     }
     const itemH: number = 40;
-    const menuW: number = Math.max(150, Math.min(220, this.shedListW));
+    // 手机（窗口 < 600vp，横向滚动）上气泡往往接近 80% 屏宽，菜单跟着气泡走会顶到 220vp，
+    // 占掉大半个屏；改成按屏宽 1/3 收窄。平板 11 列铺满时保持原来的定宽，宽度正好。
+    const menuW: number = this.isTabletMode()
+      ? Math.max(150, Math.min(220, this.shedListW))
+      : Math.max(110, Math.round(this.viewW / 3));
     let x: number = this.shedListX + this.shedListW - menuW;
     if (x < 6) {
       x = 6;
@@ -1916,12 +1928,7 @@ export struct MixCalcTable {
     // 防呆：整行的号全转给一个空行，等于只是把整行往下挪一格（来源行被回收、下面整体上移），
     // 屏幕闪一下却什么都没变——直接不让转；目标行不是空的（真合并）才照常转。
     if (pointlessWholeRowMove(oldTarget, this.shedNumbersOf(sourceRow), numbers)) {
-      promptAction.showToast({
-        message: t(this.lang, 'shed.transferWholeToBlank'),
-        duration: 2500,
-        alignment: Alignment.Top,
-        offset: { dx: 0, dy: 72 }
-      });
+      this.showBanner(t(this.lang, 'shed.transferWholeToBlank'), 2500);
       this.clearPendingTransfer();
       return;
     }
@@ -2705,24 +2712,10 @@ export struct MixCalcTable {
           })
       )
 
-      // 超上限横幅：正好压在表头这一行（y=0、高=表头高），
-      // 不用系统 toast 的 offset——状态栏/标题栏高度因机型而异，toast 会压到交界处。
-      // hitTestBehavior 设成 None，不挡底下的表头点击。
+      // 提示胶囊：正好压在表头这一行（y=0、高=表头高）。
+      // 位置用表格自己的坐标系，不受状态栏/标题栏高度影响；hitTestBehavior 在组件里放行点击。
       if (this.limitBannerOn) {
-        Text(t(this.lang, 'shed.overLimit').replace('%d', MAX_SHED_NUMBER.toString()))
-          .width('100%')
-          .height(this.hh())
-          .position({ x: 0, y: 0 })
-          .fontSize('15vp')
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#7A1F1F')
-          .textAlign(TextAlign.Center)
-          .maxLines(1)
-          .backgroundColor('#FBE3E3')
-          .borderWidth({ bottom: 1 })
-          .borderColor('#E8B4B4')
-          .hitTestBehavior(HitTestMode.None)
-          .zIndex(8)
+        ToastPill({ message: this.bannerMsg, top: 0 })
       }
 
       // 单元格编辑器：放在最外层 Stack（和表体平级），

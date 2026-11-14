@@ -1,7 +1,8 @@
 import { MixCalcTable } from '../table/MixCalcTable';
+import { ToastPill } from '../common/ToastPill';
 import { preferences } from '@kit.ArkData';
-import { common } from '@kit.AbilityKit';
-import { promptAction, router, window, KeyboardAvoidMode } from '@kit.ArkUI';
+import { common, bundleManager } from '@kit.AbilityKit';
+import { router, window, KeyboardAvoidMode } from '@kit.ArkUI';
 import { Batch } from '../model/Batch';
 import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
@@ -66,6 +67,11 @@ struct Index {
   @State fermentAvg: boolean = false;
   @State langPref: string = '';
   @State langOpen: boolean = false;
+  // 页内提示胶囊：文案为空即不显示；换文案时重置 2 秒计时
+  @State toastMsg: string = '';
+  private toastTimer: number = -1;
+  // 菜单里显示的版本号：从包信息读，别再手写（0.3.6 时手写的字符串忘了改）
+  private appVersion: string = '';
   @State privacyOpen: boolean = false;
   // 边到边避让高度（px，由 WindowChrome 合入 AppStorage）：状态栏 / 导航条（含手势条）
   @StorageProp('insetTopPx') insetTopPx: number = 0;
@@ -117,7 +123,7 @@ struct Index {
     items.push(new MenuItem(t(this.lang, 'menu.lang'), () => {
       this.langOpen = true;
     }));
-    items.push(new MenuItem(t(this.lang, 'menu.version'), () => {
+    items.push(new MenuItem(t(this.lang, 'menu.version').replace('%v', this.appVersion), () => {
     }));
     return items;
   }
@@ -140,6 +146,13 @@ struct Index {
   }
 
   async aboutToAppear(): Promise<void> {
+    // 菜单里的版本号从包信息读：升版本只改 AppScope/app.json5，不用再手动同步字符串
+    try {
+      this.appVersion = bundleManager.getBundleInfoForSelfSync(
+        bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT).versionName;
+    } catch (e) {
+      this.appVersion = '';
+    }
     // 手机/平板横竖屏统一用 RESIZE：键盘把页面压矮，表尾始终露在键盘上方
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE);
@@ -253,15 +266,13 @@ struct Index {
     }
     const lines: string[] = text.split('\n');
     if (lines.length < 3) {
-      // 文案读不到就不能算同意过：提示后退出，等用户重试
-      promptAction.showToast({
-        message: t(this.lang, 'privacy.loadFail'),
-        duration: 3000,
-        alignment: Alignment.Top,
-        offset: { dx: 0, dy: 72 }
-      });
+      // 文案读不到就不能算同意过：提示后退出，等用户重试。
+      // 页内胶囊没有独立窗口，立刻 exit 会一帧都看不到，留 1.8 秒再关。
+      this.toast(t(this.lang, 'privacy.loadFail'));
       const ctx2 = getContext(this) as common.UIAbilityContext;
-      ctx2.terminateSelf();
+      setTimeout(() => {
+        ctx2.terminateSelf();
+      }, 1800);
       return;
     }
     this.privacyTitle = lines[0].trim();
@@ -585,13 +596,15 @@ struct Index {
   }
 
   private toast(message: string): void {
-    promptAction.showToast({
-      message: message,
-      duration: 2000,
-      // 统一放在表格最上面一行，不再出现在屏幕底部
-      alignment: Alignment.Top,
-      offset: { dx: 0, dy: 72 }
-    });
+    // 页内胶囊：位置钉在表头行，和表格自己的提示同一套外观
+    this.toastMsg = message;
+    if (this.toastTimer !== -1) {
+      clearTimeout(this.toastTimer);
+    }
+    this.toastTimer = setTimeout(() => {
+      this.toastMsg = '';
+      this.toastTimer = -1;
+    }, 2000);
   }
 
   private openPage(route: string): void {
@@ -1086,6 +1099,11 @@ struct Index {
         }
         .width('100%')
         .height('100%')
+      }
+
+      // 页内提示胶囊：y = 状态栏 + 标题栏，正好盖住表头那一行，不跨两栏交界
+      if (this.toastMsg !== '') {
+        ToastPill({ message: this.toastMsg, top: this.insetVp(this.insetTopPx) + 40 })
       }
 
     }
