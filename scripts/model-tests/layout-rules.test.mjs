@@ -59,4 +59,10 @@ export default function run(t) {
   // 空可见表 / 非法宽度
   t.equal(R.fillsAllColumns([], 800), false, '空可见表 false');
   t.equal(R.fillsAllColumns(all, 0), false, '宽度 0 false');
+
+  // 「快捷设置」面板 / 主菜单的顶边必须落在标题栏下沿（= 表头顶边）：
+  // 之前面板硬编码 y=40，有状态栏时正好压在标题栏上。
+  t.equal(R.titleBarBottomY(0), 40, '无状态栏时面板顶边贴表头顶边');
+  t.equal(R.titleBarBottomY(30), 70, '状态栏 30vp 时面板顶边 = 状态栏 + 标题栏');
+  t.equal(R.titleBarBottomY(-5), 40, '非法负避让高度按 0 处理');
 }

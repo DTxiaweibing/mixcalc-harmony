@@ -57,3 +57,14 @@ export function rightAlignedX(cellRight: number, popupWidth: number, widthVp: nu
   const maxX: number = Math.max(0, widthVp - popupWidth);
   return Math.max(0, Math.min(cellRight - popupWidth, maxX));
 }
+
+// 标题栏高度（vp）：状态栏下面那条绿条，Index 与安卓 title_bar 同为 40dp
+export const TITLE_BAR_HEIGHT: number = 40;
+
+// 标题栏下沿（= 表头顶边）在页面坐标里的 y。
+// 「快捷设置」面板、主菜单、批次子菜单、页内提示都从这里取，
+// 别再各自写常数：之前面板写死 y=40，有状态栏时正好压住标题栏。
+export function titleBarBottomY(insetTopVp: number): number {
+  const inset: number = insetTopVp > 0 ? insetTopVp : 0;
+  return inset + TITLE_BAR_HEIGHT;
+}

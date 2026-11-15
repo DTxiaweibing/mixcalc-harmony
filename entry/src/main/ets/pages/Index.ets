@@ -8,7 +8,7 @@ import { FeedData } from '../model/FeedData';
 import { BatchStore, BATCH_COUNT } from '../model/BatchStore';
 import { settleRows, RowSettleResult } from '../model/RowSettlement';
 import { t } from '../common/Strings';
-import { LAYOUT_COLUMN_IDS, fillsAllColumns, isTabletWidth } from '../common/LayoutRules';
+import { LAYOUT_COLUMN_IDS, fillsAllColumns, isTabletWidth, titleBarBottomY } from '../common/LayoutRules';
 import { applyHomeBars, STATUS_BAR_COLOR, TABLE_BOTTOM_COLOR, toVp } from '../common/WindowChrome';
 import { i18n } from '@kit.LocalizationKit';
 import { util } from '@kit.ArkTS';
@@ -778,7 +778,7 @@ struct Index {
         .width(this.menuWidth())
         .backgroundColor(Color.White)
         .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
-        .position({ x: 0, y: this.insetVp(this.insetTopPx) + 40 })
+        .position({ x: 0, y: titleBarBottomY(this.insetVp(this.insetTopPx)) })
 
         if (this.batchMenuOpen) {
           Column() {
@@ -820,7 +820,7 @@ struct Index {
           .borderRadius(12)
           .clip(true)
           .shadow({ radius: 10, color: '#40000000', offsetX: 0, offsetY: 2 })
-          .position({ x: this.menuWidth(), y: this.insetVp(this.insetTopPx) + 80 })
+          .position({ x: this.menuWidth(), y: titleBarBottomY(this.insetVp(this.insetTopPx)) + 40 })
         }
       }
 
@@ -934,7 +934,7 @@ struct Index {
         .width('100%')
         .backgroundColor(Color.White)
         .shadow({ radius: 8, color: '#40000000', offsetX: 0, offsetY: 2 })
-        .position({ x: 0, y: 40 })
+        .position({ x: 0, y: titleBarBottomY(this.insetVp(this.insetTopPx)) })
       }
 
       if (this.langOpen) {
@@ -1103,7 +1103,7 @@ struct Index {
 
       // 页内提示胶囊：y = 状态栏 + 标题栏，正好盖住表头那一行，不跨两栏交界
       if (this.toastMsg !== '') {
-        ToastPill({ message: this.toastMsg, top: this.insetVp(this.insetTopPx) + 40 })
+        ToastPill({ message: this.toastMsg, top: titleBarBottomY(this.insetVp(this.insetTopPx)) })
       }
 
     }
