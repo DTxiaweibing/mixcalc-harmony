@@ -22,6 +22,9 @@ const SHED_ACTION_TRANSFER_OUT: number = 4;
 const SHED_ACTION_TRANSFER_IN: number = 5;
 const ROW_H: number = 40;
 const HEAD_H: number = 40;
+// 换料比例菜单的整份高度：标题 48 + 分隔线 1 + 9 项 × 40 + 8 条分隔线 = 417，取 418。
+// 只用来判断「贴在单元格下方放不放得下」：放不下就整份翻到单元格上方，绝不滚动。
+const RATIO_MENU_H: number = 418;
 // 棚号格自适应字号的下限：正常机型 14vp 就放得下，只有系统字体偏宽的机型
 // 会缩到 12~13vp；给到 10vp 只是兜底，避免极端字体把内容裁掉。
 const SHED_MIN_FONT_VP: string = '10vp';
@@ -344,6 +347,12 @@ export struct MixCalcTable {
 
   private editRow: number = -1;
   private editCol: number = -1;
+  // 进入编辑那一刻的料值（对齐安卓 MixCalcActivity.editBeginValue）。
+  // 浮层是逐字符提交的：退格清空到最后一位时，模型里只剩最后一位数字，
+  // 只有编辑前的原值才是「细粒径料真正被清掉、要并进粗料」的量。
+  private editBeginValue: number = 0;
+  // 本次编辑已经完成了「细料并进粗料」，还欠一个「换料完成」提示
+  private switchDonePending: boolean = false;
   // 超上限提示每次编辑只弹一次，别敲一个字符弹一次
   private overLimitWarned: boolean = false;
   // 提示胶囊：压在表头这一行，自动收；位置由表格自己的坐标系给（y=0），不猜状态栏高度
@@ -422,6 +431,21 @@ export struct MixCalcTable {
       },
       onSecondary: () => {
         this.onHelp();
+      }
+    }),
+    autoCancel: true,
+    customStyle: true
+  });
+
+  // 换料完成提示：与安卓 showStyledConfirmDialog70(换料完成 / 细粒径料合并到粗粒径料，换料完成)
+  // 一致——70% 宽、标题 18vp、正文 15vp，单个绿色「确定」按钮，没有取消。
+  private switchDoneMessage: string = '';
+  private switchDoneController: CustomDialogController = new CustomDialogController({
+    builder: HintDialog({
+      title: t(this.lang, 'switch.doneTitle'),
+      message: this.switchDoneMessage,
+      confirmText: t(this.lang, 'btn.ok'),
+      onConfirm: () => {
       }
     }),
     autoCancel: true,
@@ -892,6 +916,22 @@ export struct MixCalcTable {
     }
   }
 
+  // 各料列（发酵/粉/0.3/0.5/1.0）当前的真实数值；编辑开始那一刻拍一张，用于清零结算
+  private feedValueAt(row: number, column: number): number {
+    if (row < 0 || row >= this.rows.length) {
+      return 0;
+    }
+    const data: FeedData = this.rows[row];
+    switch (column) {
+      case 4: return data.fermented;
+      case 5: return data.powder;
+      case 6: return data.feed03;
+      case 7: return data.feed05;
+      case 8: return data.feed10;
+      default: return 0;
+    }
+  }
+
   private currentValue(row: number, column: number): string {
     const data: FeedData = this.rows[row];
     if (column === 1) {
@@ -1120,10 +1160,18 @@ export struct MixCalcTable {
       row.setAverageManually(number, this.fermentedInAverage);
     } else {
       const nfIndex: number = this.nfIndexOf(col);
-      const origin: number = nfIndex >= 0 ? row.getNonFermentedValue(nfIndex) : 0;
+      // 用「进入编辑那一刻」的原值，不用逐字符提交后的当前值：
+      // 退格清空到最后一位时模型里只剩最后一位数字，拿它当细料的量会少记
+      const origin: number = nfIndex >= 0 ? this.editBeginValue : 0;
       row.isAverageManuallyModified = false;
       if (number === 0 && nfIndex >= 0) {
-        row.mergeSmallerWhenCleared(nfIndex, origin);
+        if (row.mergeSmallerWhenCleared(nfIndex, origin) > 0) {
+          // 细粒径料并入粗粒径料 → 只剩一档，换料完成。
+          // 清掉 editBeginValue，收尾那次 applyEdit 不会把同一笔量再并一次；
+          // 弹窗与安卓一致，只提示「换料完成」，不要求用户确认算法。
+          this.editBeginValue = 0;
+          this.switchDonePending = true;
+        }
       }
       switch (col) {
         case 4: row.fermented = number; break;
@@ -1147,6 +1195,27 @@ export struct MixCalcTable {
     if (persist) {
       this.onChanged();
     }
+    if (this.switchDonePending) {
+      this.showSwitchDoneLater();
+    }
+  }
+
+  // 换料完成提示延后到本帧提交收尾之后：弹窗会抢焦点，
+  // 不能在 applyEdit 中途把正在提交的输入框抽走（会留下半截编辑态）。
+  // 只关掉触发这次合并的那一格，用户如果已经换到别的格子就别动它。
+  private showSwitchDoneLater(): void {
+    // 先把欠账销掉：收尾那次 applyEdit（finishEdit 里的落盘提交）不会再排第二遍
+    this.switchDonePending = false;
+    const rowAtMerge: number = this.editRow;
+    const colAtMerge: number = this.editCol;
+    setTimeout(() => {
+      if (this.editRow === rowAtMerge && this.editCol === colAtMerge
+        && (this.editingRow >= 0 || this.editingCol >= 0)) {
+        this.finishEdit();
+      }
+      this.switchDoneMessage = t(this.lang, 'switch.doneMsg');
+      this.switchDoneController.open();
+    }, 0);
   }
 
   // 对齐安卓 afterTextChanged：敲一个字符就重算（边输边算），但不落盘
@@ -2071,6 +2140,10 @@ export struct MixCalcTable {
     this.hideLimitBanner();
     this.editRow = row;
     this.editCol = column;
+    // 拍下这一格编辑前的料值：清零并把细料并进粗料时要拿它当「被清掉的量」，
+    // 不能用逐字符提交后的当前值（退格到最后一位时只剩一位数字）
+    this.editBeginValue = this.feedValueAt(row, column);
+    this.switchDonePending = false;
     this.editorTitle = this.headLabel(column) + ' · ' + t(this.lang, 'dlg.row').replace('%d', (row + 1).toString());
     this.editorValue = this.currentValue(row, column);
     this.editorIsNumber = column !== 1;
@@ -2212,25 +2285,37 @@ export struct MixCalcTable {
     this.ratioCurrent = data.switchRatio;
     const maxX: number = Math.max(0, this.viewW - 160);
     this.ratioX = Math.max(0, Math.min(this.columnLeft(column), maxX));
-    this.ratioY = Math.min((row + 1) * this.rh() - this.offsetY, Math.max(0, this.viewH - 260));
+    // 被长按单元格的上下沿（外层 Stack 坐标 = 表头高 + 行号 × 行高 - 滚动量）。
+    // 以前这里漏了 hh()，菜单顶边比格子的下沿高出一行表头，正好压在被点的格子上。
+    const cellTop: number = this.hh() + row * this.rh() - this.offsetY;
+    const cellBottom: number = cellTop + this.rh();
+    const componentH: number = this.hh() + this.viewH + this.rh();
+    // 默认整份贴在单元格下沿；只有下方真放不下（靠表尾）才整份翻到上方。
+    // 不滚动、不收窄——10%~90% 一次全部显示。
+    let y: number = cellBottom;
+    if (y + RATIO_MENU_H > componentH) {
+      y = cellTop - RATIO_MENU_H;
+    }
+    this.ratioY = Math.max(0, y);
     this.ratioOpenedAt = Date.now();
     this.ratioOpen = true;
   }
 
   private selectRatio(ratio: number): void {
-    if (this.ratioRow < 0) {
+    if (this.ratioRow < 0 || this.ratioRow >= this.rows.length) {
       return;
     }
     const data: FeedData = this.rows[this.ratioRow];
     data.switchRatio = ratio;
-    const avg: number = data.average;
+    // 选完立即重算一次：把该行当前的每棚平均钉住（平均不变），
+    // 再按新比例把总量分到两档（大一号 = 总量×ratio），派生出水与称料。
+    // 第一行没有特权——以前这里跳过了 ratioRow === 0，第一行点了比例什么都不发生。
+    const avg: number = data.averageValue(this.fermentedInAverage);
     if (!data.isAverageManuallyModified && avg > 0) {
       data.average = avg;
       data.isAverageManuallyModified = true;
     }
-    if (this.ratioRow !== 0) {
-      data.recalculateDerivedOnly(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
-    }
+    data.recalculateDerivedOnly(this.waterPercentage, this.fermentedInWater, this.fermentedInAverage);
     this.recomputeFirstRow();
     this.ratioOpen = false;
     this.version = this.version + 1;

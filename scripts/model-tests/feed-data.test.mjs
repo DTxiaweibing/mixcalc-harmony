@@ -99,4 +99,82 @@ export default function run(t) {
   const flagged = new FeedData();
   flagged.isAverageManuallyModified = true;
   t.equal(flagged.hasRowData(), true, 'hasRowData: isAverageManuallyModified=true → true');
+
+  // 6) averageValue：与安卓 getAverage(boolean) 对齐——手改过平均用手改值，
+  //    否则按当前料量/棚数现算（选换料比例时要用它把当前平均钉住）
+  const computed = new FeedData();
+  computed.setShedNumber('1-10');
+  computed.powder = 500;
+  t.equal(computed.averageValue(false), 50, 'averageValue: 500/10 → 50');
+  computed.fermented = 100;
+  t.equal(computed.averageValue(false), 50, 'averageValue: 发酵料不参与算料 → 仍 50');
+  t.equal(computed.averageValue(true), 60, 'averageValue: 发酵料参与算料 → 600/10 → 60');
+  const manualAvg = new FeedData();
+  manualAvg.setShedNumber('1-10');
+  manualAvg.powder = 500;
+  manualAvg.average = 12.5;
+  manualAvg.isAverageManuallyModified = true;
+  t.equal(manualAvg.averageValue(false), 12.5, 'averageValue: 手改过 → 直接用 average');
+  const zeroShed = new FeedData();
+  zeroShed.powder = 500;
+  t.equal(zeroShed.averageValue(false), 0, 'averageValue: 棚数 0 → 0');
+
+  // 7) 选完换料比例立即按比例拆两格（安卓 applySwitchRatioNow 的模型侧等价）
+  const oneFeed = new FeedData();
+  oneFeed.setShedNumber('1-10');
+  oneFeed.powder = 500;
+  oneFeed.switchRatio = 0.3;
+  oneFeed.average = oneFeed.averageValue(false);
+  oneFeed.isAverageManuallyModified = true;
+  oneFeed.recalculateDerivedOnly(20, false, false);
+  t.equal(oneFeed.powder, 350, '换料比例 30%: 粉料 = 500 × 0.7');
+  t.equal(oneFeed.feed03, 150, '换料比例 30%: 0.3料 = 500 × 0.3');
+  t.equal(oneFeed.average, 50, '换料比例: 每棚平均不变');
+
+  const twoFeed = new FeedData();
+  twoFeed.setShedNumber('1-10');
+  twoFeed.powder = 400;
+  twoFeed.feed03 = 100;
+  twoFeed.switchRatio = 0.5;
+  twoFeed.average = twoFeed.averageValue(false);
+  twoFeed.isAverageManuallyModified = true;
+  twoFeed.recalculateDerivedOnly(20, false, false);
+  t.equal(twoFeed.powder, 250, '换料比例 50%: 粉料 = 500 × 0.5');
+  t.equal(twoFeed.feed03, 250, '换料比例 50%: 0.3料 = 500 × 0.5');
+
+  // 8) mergeSmallerWhenCleared：把「最细的一档」清零时并进唯一的粗料，量用调用方传的编辑前原值
+  const merged = new FeedData();
+  merged.setShedNumber('1-10');
+  merged.powder = 350;
+  merged.feed03 = 150;
+  merged.switchRatio = 0.3;
+  t.equal(merged.mergeSmallerWhenCleared(0, 350), 350, 'merge: 清零粉料 → 返回并入量 350');
+  t.equal(merged.feed03, 500, 'merge: 0.3料 = 150 + 350');
+  t.equal(merged.powder, 0, 'merge: 粉料 清 0');
+  t.equal(merged.switchRatio, 0, 'merge: 换料比例作废');
+  t.equal(merged.mergeSmallerWhenCleared(0, 0), 0, 'merge: 调用方已作废原值（0）→ 不再并第二笔');
+
+  const midFeed = new FeedData();
+  midFeed.setShedNumber('1-10');
+  midFeed.feed05 = 150;
+  midFeed.feed10 = 100;
+  t.equal(midFeed.mergeSmallerWhenCleared(2, 150), 150, 'merge: 清零 0.5料 → 并进 1.0料');
+  t.equal(midFeed.feed10, 250, 'merge: 1.0料 = 100 + 150');
+
+  const notAFinerExit = new FeedData();
+  notAFinerExit.setShedNumber('1-10');
+  notAFinerExit.powder = 100;
+  notAFinerExit.feed05 = 150;
+  t.equal(notAFinerExit.mergeSmallerWhenCleared(2, 150), 0, 'merge: 前面还有更细的一档有料 → 不合并');
+
+  const twoCoarser = new FeedData();
+  twoCoarser.setShedNumber('1-10');
+  twoCoarser.feed03 = 100;
+  twoCoarser.feed05 = 100;
+  t.equal(twoCoarser.mergeSmallerWhenCleared(0, 80), 0, 'merge: 粗料不止一档 → 不合并');
+
+  const zeroAmount = new FeedData();
+  zeroAmount.setShedNumber('1-10');
+  zeroAmount.powder = 100;
+  t.equal(zeroAmount.mergeSmallerWhenCleared(1, 0), 0, 'merge: 原值为 0 → 不合并');
 }

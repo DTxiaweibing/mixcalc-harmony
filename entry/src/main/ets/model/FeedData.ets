@@ -151,6 +151,22 @@ export class FeedData {
     this.average = this.shedCount > 0 ? sum / this.shedCount : 0;
   }
 
+  /**
+   * 与安卓 FeedData#getAverage(boolean) 对齐：手改过平均就用手改值，
+   * 否则按当前料量/棚数现算。选换料比例时要先把「当前的每棚平均」钉住，
+   * 直接读 average 字段可能拿到上一轮派生计算的旧值。
+   */
+  averageValue(fermentedInAverage: boolean): number {
+    if (this.isAverageManuallyModified) {
+      return this.average;
+    }
+    let sum: number = this.nonFermentedSum();
+    if (fermentedInAverage) {
+      sum += this.fermented;
+    }
+    return this.shedCount > 0 ? sum / this.shedCount : 0;
+  }
+
   calculateWater(waterPercentage: number, fermentedInWater: boolean): void {
     let sum: number = this.nonFermentedSum();
     if (fermentedInWater) {
