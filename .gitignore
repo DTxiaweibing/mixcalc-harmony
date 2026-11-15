@@ -9,9 +9,10 @@ oh_modules/
 *.jpeg
 *.jpg
 
-# AGC 凭证（含 client_secret）：绝不入库
+# AGC 凭证（含 client_secret / 服务账号私钥）：绝不入库
 .env
 .env.local
+.secrets/
 
 # 签名材料 / 云测产物：不要提交
 *.p12
@@ -33,3 +34,6 @@ __pycache__/
 
 # 模型层测试编译产物（scripts/run-model-tests.mjs 自动生成）
 scripts/.model-test-build/
+
+# AGC 报表产物（scripts/agc-download-report.mjs 默认落到仓库根）
+agc-download-*.csv
